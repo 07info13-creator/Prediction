@@ -58,15 +58,14 @@ function clean(text){
 function detect(text){
   const t=clean(text);
   // "sis" correspond à la prononciation française de « six ».
-  const spoken=t.replace(/\b(?:sis|sisse|sixe)\b/g,"six");
+  const spoken=t.replace(/\b(?:cisse|sis|sisse|sixe|six)\b/g,"six");
   let r=null,s=null;
 
   const ranks=[
     [/\b(?:10|dix|ten)\b/,"10"],
     [/\b(?:9|neuf|nine)\b/,"9"],
     [/\b(?:8|huit|eight)\b/,"8"],
-    [/\b(?:7|sept|seven)\b/,"7"],
-    [/\b(?:6|six|sis|sisse|sixe)\b/,"6"],
+    [/\b(?:7|sept|seven)\b/,"7"],    [/(?:cisse|sis|sisse|sixe|six|6)/,"6"],
     [/\b(?:5|cinq|five)\b/,"5"],
     [/\b(?:4|quatre|four)\b/,"4"],
     [/\b(?:3|trois|three)\b/,"3"],
