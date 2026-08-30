@@ -270,15 +270,29 @@ let phoneWasFaceDown=false;
 
 function handleOrientation(e){
   if(!detected || !orientationArmed) return;
-  if(typeof e.beta!=="number") return;
 
-  /* Le geste attendu est : téléphone écran vers le bas, puis retourné
-     écran vers le haut. On ne révèle donc pas prématurément quand il est
-     simplement posé face contre la table. */
-  // Seuils volontairement plus tolérants pour accepter un retournement imparfait.
-  const angle=Math.abs(e.beta);
-  const faceUp=angle<100;
-  const faceDown=angle>80;
+  /*
+     Détection indépendante de la façon dont le téléphone est tenu.
+     On combine beta et gamma pour estimer l'orientation de l'écran par
+     rapport à la verticale. Cela évite de dépendre d'un seul axe du capteur.
+  */
+  if(typeof e.beta!=="number" || typeof e.gamma!=="number") return;
+
+  const toRad=Math.PI/180;
+  const beta=e.beta*toRad;
+  const gamma=e.gamma*toRad;
+
+  /* z > 0 : écran vers le haut ; z < 0 : écran vers le bas. */
+  const screenZ=Math.cos(beta)*Math.cos(gamma);
+
+  /*
+     Sensibilité du retournement. Plus cette valeur est petite, plus le
+     système accepte une position imparfaite. 0.35 est volontairement
+     tolérant, tout en demandant un vrai passage de face cachée à face visible.
+  */
+  const FLIP_THRESHOLD=0.35;
+  const faceDown=screenZ < -FLIP_THRESHOLD;
+  const faceUp=screenZ > FLIP_THRESHOLD;
 
   if(faceDown){
     phoneWasFaceDown=true;
@@ -288,7 +302,7 @@ function handleOrientation(e){
     if(revealTimer) clearTimeout(revealTimer);
     revealTimer=setTimeout(()=>{
       if(detected) reveal();
-    },250);
+    },200);
   }
 }
 
