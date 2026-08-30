@@ -94,7 +94,7 @@ function cardUrl(code){
 }
 
 let rec=null,detected=null,listening=false,restarting=false;
-let listenTimer=null,revealTimer=null,orientationArmed=false;
+let listenTimer=null;
 let listenUntil=0;
 
 function preloadCard(code){
@@ -109,7 +109,7 @@ function safeRestart(){
 }
 
 function startListening(){
-  detected=null; orientationArmed=false;
+  detected=null;
   cardImage.dataset.ready="0";
   cardImage.removeAttribute("src");
 
@@ -147,7 +147,7 @@ function startListening(){
             preloadCard(found);
             try{if(rec)rec.stop()}catch(err){}
             listening=false;
-            armFlipReveal();
+            reveal();
             return;
           }
         }
@@ -176,43 +176,7 @@ function startListening(){
   }catch(e){}
 }
 
-function armFlipReveal(){
-  orientationArmed=false;
-  if(revealTimer)clearTimeout(revealTimer);
-
-  /* Temps de poser le téléphone et de le retourner. */
-  setTimeout(()=>{
-    if(detected)orientationArmed=true;
-  },1500);
-}
-
-window.addEventListener("deviceorientation",e=>{
-  if(!detected || !orientationArmed)return;
-  if(typeof e.beta!=="number")return;
-
-  /* Téléphone retourné face contre la table. */
-  if(Math.abs(e.beta)>125){
-    orientationArmed=false;
-    if(revealTimer)clearTimeout(revealTimer);
-    revealTimer=setTimeout(()=>{
-      if(detected)reveal();
-    },700);
-  }
-});
-
-async function requestOrientationPermission(){
-  try{
-    if(typeof DeviceOrientationEvent!=="undefined" &&
-       typeof DeviceOrientationEvent.requestPermission==="function"){
-      const p=await DeviceOrientationEvent.requestPermission();
-      if(p!=="granted")return false;
-    }
-  }catch(e){}
-  return true;
-}
-
-start.onclick=async()=>{
-  await requestOrientationPermission();
+start.onclick=()=>{
   startListening();
 };
 
@@ -222,7 +186,6 @@ function reveal(){
   listening=false;
   if(listenTimer)clearTimeout(listenTimer);
   listenUntil=0;
-  orientationArmed=false;
 
   /* La carte seule occupe l'écran. Aucun texte ni bouton. */
   card.style.display="flex";
@@ -232,8 +195,6 @@ function reveal(){
 card.addEventListener("click",()=>{
   card.style.display="none";
   detected=null;
-  orientationArmed=false;
-  if(revealTimer)clearTimeout(revealTimer);
   cardImage.removeAttribute("src");
   start.style.display="block";
 });
