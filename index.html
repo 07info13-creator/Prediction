@@ -195,7 +195,12 @@ function startListening(){
     listening=false;
   },120000);
 
-  if(!SR) return;
+  if(!SR){
+    start.style.display="block";
+    start.textContent="Reconnaissance vocale indisponible";
+    start.disabled=true;
+    return;
+  }
 
   try{
     rec=new SR();
@@ -259,6 +264,10 @@ function startListening(){
     rec.start();
   }catch(e){}
 }
+
+start.onclick=()=>{
+  startListening();
+};
 
 function safeRestart(){
   try{if(rec)rec.start()}catch(e){}
