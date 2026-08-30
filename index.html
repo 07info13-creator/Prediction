@@ -13,8 +13,7 @@ html,body{margin:0;width:100%;height:100%;background:#090909;color:#fff;font-fam
 #start{margin-top:28px;background:#fff;color:#111;border:0;border-radius:28px;padding:15px 25px;font-size:17px}
 #listen{display:none;font-size:18px;opacity:.8}
 #status{display:none;margin-top:14px;font-size:13px;opacity:.55;max-width:340px;line-height:1.4}
-#card{display:none;width:min(76vw,430px);aspect-ratio:2/3;background:#fff;border-radius:22px;
-align-items:center;justify-content:center;box-shadow:0 8px 45px #000}
+#card{display:none;width:min(76vw,430px);aspect-ratio:2/3;background:#fff;border-radius:22px;align-items:center;justify-content:center;box-shadow:0 8px 45px #000}
 #cardText{font-size:min(28vw,155px);font-weight:bold}
 #again{display:none;position:absolute;bottom:24px;border:0;background:#333;color:#fff;border-radius:22px;padding:10px 16px}
 .red{color:#c00}.black{color:#111}
@@ -23,13 +22,14 @@ align-items:center;justify-content:center;box-shadow:0 8px 45px #000}
 <body>
 <div id="app">
   <div id="prediction">PRÉDICTION</div>
-  <div id="instruction">Dis simplement la valeur et la couleur, par exemple « 7 de pique ».</div>
+  <div id="instruction">Dis simplement la valeur et la couleur, par exemple « 8 de cœur ».</div>
   <button id="start">Démarrer la prédiction</button>
   <div id="listen">● Écoute…</div>
   <div id="status"></div>
   <div id="card"><div id="cardText"></div></div>
   <button id="again">Nouvelle prédiction</button>
 </div>
+
 <script>
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const prediction=document.getElementById("prediction");
@@ -42,7 +42,7 @@ const cardText=document.getElementById("cardText");
 const again=document.getElementById("again");
 
 const ranks={
-  "as":"A","ace":"A","1":"A",
+  "as":"A","ace":"A","un":"A","une":"A","1":"A",
   "deux":"2","two":"2","2":"2",
   "trois":"3","three":"3","3":"3",
   "quatre":"4","four":"4","4":"4",
@@ -56,18 +56,27 @@ const ranks={
   "dame":"Q","queen":"Q","q":"Q",
   "roi":"K","king":"K","k":"K"
 };
+
 const suits={
   "coeur":"♥","coeurs":"♥","heart":"♥","hearts":"♥",
   "carreau":"♦","carreaux":"♦","diamond":"♦","diamonds":"♦",
-  "trèfle":"♣","trèfles":"♣","trefle":"♣","trefles":"♣","club":"♣","clubs":"♣",
+  "trèfle":"♣","trèfles":"♣","trefle":"♣","trefles":"♣","tref":"♣",
+  "club":"♣","clubs":"♣",
   "pique":"♠","piques":"♠","spade":"♠","spades":"♠"
 };
 
-function detect(text){
-  text=text.toLowerCase()
+function clean(text){
+  return text.toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[’']/g," ").replace(/-/g," ");
-  const words=text.split(/\s+/);
+    .replace(/[’']/g," ")
+    .replace(/-/g," ")
+    .replace(/[.,!?;:()[\]{}]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function detect(text){
+  const words=clean(text).split(/\s+/);
   let r=null,s=null;
   for(const w of words){
     if(ranks[w]) r=ranks[w];
@@ -77,6 +86,7 @@ function detect(text){
 }
 
 let rec=null, detected=null, listening=false;
+let finalTranscript="";
 
 function showStatus(msg){
   status.textContent=msg;
@@ -84,17 +94,24 @@ function showStatus(msg){
 }
 
 function startListening(){
+  detected=null;
+  finalTranscript="";
+
   if(!SR){
-    instruction.textContent="La reconnaissance vocale n'est pas disponible ici. Ouvre ce fichier dans Google Chrome sur Android.";
-    showStatus("SpeechRecognition / webkitSpeechRecognition est indisponible.");
+    instruction.textContent="La reconnaissance vocale n'est pas disponible ici. Ouvre cette page dans Google Chrome sur Android.";
+    showStatus("SpeechRecognition est indisponible.");
     return;
   }
 
   try{
     rec=new SR();
     rec.lang="fr-FR";
-    rec.continuous=true;
-    rec.interimResults=true;
+
+    // Important : un seul résultat final.
+    // Cela évite le doublage « huit huit » provoqué par
+    // l'assemblage des résultats intermédiaires de Chrome.
+    rec.continuous=false;
+    rec.interimResults=false;
     rec.maxAlternatives=5;
 
     rec.onstart=()=>{
@@ -103,65 +120,102 @@ function startListening(){
       instruction.style.display="none";
       start.style.display="none";
       listen.style.display="block";
-      showStatus("Microphone actif. Dis par exemple : « 8 de cœur ».");
-    };
-
-    rec.onaudiostart=()=>{
       showStatus("Microphone actif — je t'écoute…");
     };
 
+    rec.onaudiostart=()=>{
+      showStatus("Microphone actif — dis ta carte.");
+    };
+
+    rec.onspeechstart=()=>{
+      showStatus("Je t'entends…");
+    };
+
     rec.onresult=e=>{
-      let combined="";
-      for(let i=0;i<e.results.length;i++){
-        for(let j=0;j<e.results[i].length;j++){
-          combined+=" "+e.results[i][j].transcript;
+      // Avec interimResults=false, on ne traite que le résultat final.
+      const result=e.results[e.results.length-1];
+      if(!result) return;
+
+      let candidates=[];
+      for(let i=0;i<result.length;i++){
+        if(result[i] && result[i].transcript){
+          candidates.push(result[i].transcript.trim());
         }
       }
 
-      const c=detect(combined);
-      if(c){
-        detected=c;
-        showStatus("Carte reconnue. Tu peux maintenant retourner le téléphone.");
-      }else{
-        showStatus("J'ai entendu : « "+combined.trim()+" ». Carte non reconnue.");
+      // Chaque alternative est testée séparément.
+      // On ne les concatène JAMAIS.
+      let found=null;
+      let heard=candidates[0]||"";
+
+      for(const text of candidates){
+        const c=detect(text);
+        if(c){
+          found=c;
+          heard=text;
+          break;
+        }
       }
+
+      finalTranscript=heard;
+
+      if(found){
+        detected=found;
+        showStatus("J'ai entendu : « "+heard+" »");
+        setTimeout(reveal,600);
+      }else if(heard){
+        showStatus("J'ai entendu : « "+heard+" »");
+        instruction.textContent="Carte non reconnue. Essaie « 8 de cœur », « dame de trèfle », etc.";
+        instruction.style.display="block";
+        listen.style.display="none";
+        start.style.display="block";
+      }
+    };
+
+    rec.onnomatch=()=>{
+      showStatus("Je n'ai pas compris la carte.");
+      instruction.textContent="Réessaie en disant lentement : « 8 de cœur », « 7 de trèfle », etc.";
+      instruction.style.display="block";
+      listen.style.display="none";
+      start.style.display="block";
     };
 
     rec.onerror=e=>{
       listening=false;
       console.log("SpeechRecognition error:",e.error,e.message);
+
       if(e.error==="not-allowed" || e.error==="service-not-allowed"){
-        instruction.textContent="Chrome bloque l'accès au microphone. Vérifie l'autorisation du microphone pour Chrome, puis recharge la page.";
+        instruction.textContent="Chrome bloque l'accès au microphone. Vérifie l'autorisation du microphone pour ce site.";
       }else if(e.error==="audio-capture"){
-        instruction.textContent="Le microphone n'est pas accessible. Vérifie qu'aucune autre application ne l'utilise.";
+        instruction.textContent="Le microphone n'est pas accessible.";
       }else if(e.error==="network"){
-        instruction.textContent="La reconnaissance vocale Chrome nécessite une connexion réseau sur cet appareil.";
+        instruction.textContent="La reconnaissance vocale Chrome nécessite une connexion Internet.";
+      }else if(e.error==="no-speech"){
+        instruction.textContent="Je n'ai pas entendu de parole. Recommence et parle après « Je t'écoute… ».";
       }else{
-        instruction.textContent="La reconnaissance vocale a rencontré un problème (« "+e.error+" »). Appuie sur Nouvelle prédiction pour réessayer.";
+        instruction.textContent="Problème de reconnaissance (« "+e.error+" »). Recommence.";
       }
+
       instruction.style.display="block";
       listen.style.display="none";
       start.style.display="block";
-      showStatus("Erreur micro : "+e.error);
+      showStatus("Erreur : "+e.error);
     };
 
     rec.onend=()=>{
       listening=false;
-      if(!detected && document.visibilityState==="visible"){
-        setTimeout(()=>{
-          if(!detected && !listening){
-            try{ rec.start(); }catch(e){}
-          }
-        },300);
-      }
+      listen.style.display="none";
+      // Pas de redémarrage automatique : cela évite les doubles écoutes
+      // et les transcriptions répétées sur Android.
     };
 
     rec.start();
+
   }catch(e){
     console.error(e);
-    instruction.textContent="Impossible de démarrer le microphone. Ouvre la page dans Google Chrome et autorise le microphone.";
+    instruction.textContent="Impossible de démarrer la reconnaissance vocale. Recharge la page et réessaie.";
     instruction.style.display="block";
-    showStatus("Erreur de démarrage : "+e.message);
+    showStatus("Erreur de démarrage.");
     start.style.display="block";
     listen.style.display="none";
   }
@@ -171,15 +225,15 @@ function reveal(){
   if(!detected){
     instruction.textContent="Aucune carte reconnue. Appuie sur « Nouvelle prédiction » et recommence.";
     instruction.style.display="block";
-    listen.style.display="none";
-    start.style.display="none";
     again.style.display="block";
     return;
   }
-  try{rec.stop()}catch(e){}
+
+  try{if(rec) rec.stop();}catch(e){}
   listening=false;
   listen.style.display="none";
   status.style.display="none";
+
   cardText.textContent=detected;
   cardText.className=(detected.includes("♥")||detected.includes("♦"))?"red":"black";
   card.style.display="flex";
@@ -187,17 +241,19 @@ function reveal(){
 }
 
 start.onclick=startListening;
+
 document.addEventListener("dblclick",()=>reveal());
 
 again.onclick=()=>{
-  try{rec.stop()}catch(e){}
+  try{if(rec) rec.stop();}catch(e){}
   detected=null;
   listening=false;
+  finalTranscript="";
   card.style.display="none";
   again.style.display="none";
   prediction.style.display="block";
   instruction.style.display="block";
-  instruction.textContent="Dis simplement la valeur et la couleur, par exemple « 7 de pique ».";
+  instruction.textContent="Dis simplement la valeur et la couleur, par exemple « 8 de cœur ».";
   status.style.display="none";
   start.style.display="block";
   listen.style.display="none";
