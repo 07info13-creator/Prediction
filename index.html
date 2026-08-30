@@ -367,6 +367,11 @@ function reveal(){
 
 /* Après révélation, un tap discret permet de préparer une nouvelle prédiction.
    Il n'y a aucun texte ni bouton affiché sur la carte. */
+// Démarrage du tour : le bouton lance bien la reconnaissance vocale.
+start.addEventListener("click",()=>{
+  startListening();
+});
+
 card.addEventListener("click",()=>{
   card.style.display="none";
   detected=null;
