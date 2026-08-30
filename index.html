@@ -41,7 +41,7 @@ html,body{
   aspect-ratio:5/7;
 }
 @media (max-aspect-ratio:5/7){
-  #cardSvg{width:100vw;height:auto;max-height:100vh}
+  #cardSvg{width:96vw;height:auto;max-height:96vh}
 }
 </style>
 </head>
@@ -98,21 +98,78 @@ function clean(text){
 function detect(text){
   const t=clean(text);
   let r=null,s=null;
-  const rankTests=[
-    [/\b(?:10|dix|ten)\b/,"10"],[ /\b(?:9|neuf|nine)\b/,"9"],
-    [/\b(?:8|huit|eight)\b/,"8"],[ /\b(?:7|sept|seven)\b/,"7"],
-    [/\b(?:6|six)\b/,"6"],[ /\b(?:5|cinq|five)\b/,"5"],
-    [/\b(?:4|quatre|four)\b/,"4"],[ /\b(?:3|trois|three)\b/,"3"],
-    [/\b(?:2|deux|two)\b/,"2"],[ /\b(?:1|as|ace|un|une)\b/,"A"],
-    [/\b(?:valet|jack|j)\b/,"J"],[ /\b(?:dame|queen|q)\b/,"Q"],
-    [/\b(?:roi|king|k)\b/,"K"]
+
+  /*
+     IMPORTANT : les figures sont testées AVANT les valeurs numériques.
+     La reconnaissance vocale Android peut parfois transformer « valet »
+     en « as », « dame » en « as », etc. Les formes phonétiques courantes
+     ci-dessous permettent aussi de récupérer certaines transcriptions
+     imparfaites.
+  */
+  const figureTests=[
+    [/\b(?:valet|jack|j|valais|valait|valets)\b/,"J"],
+    [/\b(?:dame|queen|q|damme|dames)\b/,"Q"],
+    [/\b(?:roi|roy|king|k|rois)\b/,"K"]
   ];
-  for(const [re,val] of rankTests){ if(re.test(t)){r=val;break;} }
+  for(const [re,val] of figureTests){
+    if(re.test(t)){r=val;break;}
+  }
+
+  /* Si aucune figure n'est explicitement trouvée, on analyse les autres valeurs. */
+  if(!r){
+    const rankTests=[
+      [/\b(?:10|dix|ten)\b/,"10"],[ /\b(?:9|neuf|nine)\b/,"9"],
+      [/\b(?:8|huit|eight)\b/,"8"],[ /\b(?:7|sept|seven)\b/,"7"],
+      [/\b(?:6|six)\b/,"6"],[ /\b(?:5|cinq|five)\b/,"5"],
+      [/\b(?:4|quatre|four)\b/,"4"],[ /\b(?:3|trois|three)\b/,"3"],
+      [/\b(?:2|deux|two)\b/,"2"],[ /\b(?:1|as|ace|un|une)\b/,"A"]
+    ];
+    for(const [re,val] of rankTests){ if(re.test(t)){r=val;break;} }
+  }
+
   if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="H";
   else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="D";
   else if(/\b(?:trefle|trefles|club|clubs)\b/.test(t)) s="C";
   else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="S";
   return r&&s ? r+s : null;
+}
+
+/*
+   Analyse toutes les alternatives proposées par Android au lieu de prendre
+   systématiquement la première. Une figure explicitement reconnue est
+   prioritaire sur une mauvaise alternative du type « as ».
+*/
+function detectBest(candidates){
+  let best=null;
+  let bestScore=-Infinity;
+
+  for(const item of candidates){
+    const text=typeof item==="string" ? item : item.text;
+    const confidence=typeof item==="string" ? 0 : (Number(item.confidence)||0);
+    if(!text) continue;
+
+    const code=detect(text);
+    if(!code) continue;
+
+    const rank=code.slice(0,-1);
+    let score=confidence*100;
+
+    /* Les trois figures sont volontairement très prioritaires. */
+    if(rank==="J"||rank==="Q"||rank==="K") score+=1000;
+
+    /* Une transcription contenant explicitement le mot de la figure reçoit
+       encore un bonus, même si la confiance Android est faible. */
+    const t=clean(text);
+    if(rank==="J" && /\b(?:valet|jack|j|valais|valait|valets)\b/.test(t)) score+=500;
+    if(rank==="Q" && /\b(?:dame|queen|q|damme|dames)\b/.test(t)) score+=500;
+    if(rank==="K" && /\b(?:roi|roy|king|k|rois)\b/.test(t)) score+=500;
+
+    if(score>bestScore){
+      bestScore=score;
+      best=code;
+    }
+  }
+  return best;
 }
 
 let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
@@ -137,7 +194,7 @@ function startListening(){
     rec.lang="fr-FR";
     rec.continuous=true;
     rec.interimResults=false;
-    rec.maxAlternatives=8;
+    rec.maxAlternatives=10;
 
     rec.onstart=()=>{
       listening=true;
@@ -151,15 +208,16 @@ function startListening(){
 
       const candidates=[];
       for(let i=0;i<result.length;i++){
-        if(result[i] && result[i].transcript)
-          candidates.push(result[i].transcript.trim());
+        if(result[i] && result[i].transcript){
+          candidates.push({
+            text:result[i].transcript.trim(),
+            confidence:result[i].confidence
+          });
+        }
       }
 
-      let found=null;
-      for(const text of candidates){
-        const c=detect(text);
-        if(c){found=c;break;}
-      }
+      /* Ne prend plus aveuglément la première alternative. */
+      const found=detectBest(candidates);
 
       if(found && !detected){
         detected=found;
@@ -217,8 +275,10 @@ function handleOrientation(e){
   /* Le geste attendu est : téléphone écran vers le bas, puis retourné
      écran vers le haut. On ne révèle donc pas prématurément quand il est
      simplement posé face contre la table. */
-  const faceUp=Math.abs(e.beta)<55;
-  const faceDown=Math.abs(e.beta)>125;
+  // Seuils volontairement plus tolérants pour accepter un retournement imparfait.
+  const angle=Math.abs(e.beta);
+  const faceUp=angle<100;
+  const faceDown=angle>80;
 
   if(faceDown){
     phoneWasFaceDown=true;
@@ -303,80 +363,22 @@ function drawIndex(rank,suit,x,y,scale=1,rot=0){
   text(0,72,suitSymbol[suit],42,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
 }
 
+function figureUrl(rank,suit){
+  const rankName={J:"jack",Q:"queen",K:"king"}[rank];
+  const suitName={C:"clubs",D:"diamonds",H:"hearts",S:"spades"}[suit];
+  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/English_pattern_${rankName}_of_${suitName}.svg`;
+}
+
 function drawCourt(rank,suit){
-  const red=suit==="H"||suit==="D";
-  const main=red?RED:BLACK;
-  const gold="#e8bd28", blue="#1f5aaa", white="#fff";
-  const g=el("g",{});
-
-  /* Cadre intérieur de la carte de cour. Les personnages sont dessinés
-     dans deux zones séparées afin de ne jamais dépasser du cadre. */
-  roundedRect(42,62,416,576,18,white,"#d4d4d4",3,g);
-  roundedRect(70,92,360,516,10,white,blue,6,g);
-  el("rect",{x:78,y:100,width:344,height:250,rx:7,fill:gold},g);
-  el("rect",{x:78,y:350,width:344,height:250,rx:7,fill:gold},g);
-  el("rect",{x:94,y:116,width:312,height:218,rx:5,fill:white},g);
-  el("rect",{x:94,y:366,width:312,height:218,rx:5,fill:white},g);
-
-  function figure(y,flip){
-    const tr=flip?`translate(0 ${y+390}) scale(1 -1)`:`translate(0 ${y})`;
-    const q=el("g",{transform:tr},g);
-
-    /* Silhouette compacte : toute la figure tient dans ~190 unités. */
-    el("path",{d:"M145 185 Q154 125 205 105 Q250 88 295 105 Q346 125 355 185 L330 205 L170 205 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-    el("path",{d:"M184 175 Q205 115 250 108 Q295 115 316 175 L300 205 L200 205 Z",fill:main,stroke:BLACK,"stroke-width":5},q);
-
-    /* Visage */
-    el("ellipse",{cx:250,cy:130,rx:42,ry:46,fill:"#f3d0a9",stroke:BLACK,"stroke-width":5},q);
-
-    /* Coiffure / couronne */
-    if(rank==="K"){
-      el("path",{d:"M210 116 Q250 78 290 116 L285 96 Q250 75 215 96 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-      el("circle",{cx:218,cy:94,r:4,fill:main},q);
-      el("circle",{cx:282,cy:94,r:4,fill:main},q);
-    }else if(rank==="Q"){
-      el("path",{d:"M207 116 Q250 68 293 116 L286 91 Q250 69 214 91 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-      el("circle",{cx:250,cy:80,r:5,fill:main},q);
-    }else{
-      el("path",{d:"M208 113 Q250 70 292 113 L284 91 Q250 73 216 91 Z",fill:main,stroke:BLACK,"stroke-width":4},q);
-    }
-    el("path",{d:"M211 120 Q220 82 250 82 Q280 82 289 120 Q274 101 250 101 Q226 101 211 120",fill:BLACK},q);
-    el("circle",{cx:235,cy:130,r:4,fill:BLACK},q);
-    el("circle",{cx:265,cy:130,r:4,fill:BLACK},q);
-    el("path",{d:"M238 149 Q250 156 262 149",fill:"none",stroke:BLACK,"stroke-width":4,"stroke-linecap":"round"},q);
-
-    /* Bras / manches */
-    el("path",{d:"M155 145 L112 192 L150 210 L190 164 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-    el("path",{d:"M345 145 L388 192 L350 210 L310 164 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-
-    /* Col et plastron */
-    el("path",{d:"M183 156 Q250 188 317 156 L306 180 Q250 204 194 180 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-    el("path",{d:"M214 178 L286 178 L296 205 L204 205 Z",fill:blue,stroke:BLACK,"stroke-width":4},q);
-    text(250,198,suitSymbol[suit],31,"700",main,"middle",q);
-
-    /* Petit emblème propre à la figure */
-    if(rank==="J"){
-      el("path",{d:"M225 180 L250 162 L275 180 L267 203 L233 203 Z",fill:white,stroke:BLACK,"stroke-width":3},q);
-      el("path",{d:"M250 165 L250 201",stroke:gold,"stroke-width":5},q);
-    }else if(rank==="Q"){
-      el("circle",{cx:250,cy:193,r:11,fill:gold,stroke:BLACK,"stroke-width":3},q);
-      text(250,199,"Q",15,"700",main,"middle",q);
-    }else{
-      el("path",{d:"M232 181 L268 181 L263 204 L237 204 Z",fill:gold,stroke:BLACK,"stroke-width":3},q);
-      el("path",{d:"M250 181 L250 204",stroke:main,"stroke-width":4},q);
-    }
-  }
-
-  /* Deux figures séparées, l'une au-dessus de l'autre. */
-  figure(128,false);
-  figure(262,true);
-
-  /* Indices classiques dans les coins. */
-  text(48,82,rank,58,"700",main,"middle",g);
-  text(48,126,suitSymbol[suit],40,"700",main,"middle",g);
-  const bottom=el("g",{transform:"rotate(180 452 618)"},g);
-  text(48,82,rank,58,"700",main,"middle",bottom);
-  text(48,126,suitSymbol[suit],40,"700",main,"middle",bottom);
+  /*
+     Les figures utilisent de vraies cartes SVG du modèle classique, plutôt
+     qu'un dessin simplifié. Le fichier SVG externe est chargé comme image :
+     cela évite les problèmes de redimensionnement des personnages.
+  */
+  const url=figureUrl(rank,suit);
+  svg.setAttribute("viewBox","0 0 500 750");
+  const img=el("image",{x:0,y:0,width:500,height:750,href:url,"preserveAspectRatio":"xMidYMid meet"});
+  img.setAttributeNS("http://www.w3.org/1999/xlink","href",url);
 }
 
 function renderCard(code){
@@ -385,21 +387,22 @@ function renderCard(code){
   const red=suit==="H"||suit==="D";
   const ink=red?RED:BLACK;
 
-  /* Carte conservant exactement le ratio 5:7 et occupant tout l'écran. */
-  roundedRect(5,5,490,690,30,"#fff","#d0d0d0",2);
-  roundedRect(18,18,464,664,24,"none","#eeeeee",1);
-
   if(rank==="J"||rank==="Q"||rank==="K"){
     drawCourt(rank,suit);
-  }else{
-    text(52,72,rank,58,"700",ink,"middle");
-    text(52,119,suitSymbol[suit],40,"700",ink,"middle");
-    const corner=el("g",{transform:"rotate(180 448 628)"});
-    text(52,72,rank,58,"700",ink,"middle",corner);
-    text(52,119,suitSymbol[suit],40,"700",ink,"middle",corner);
-    if(rank==="A") pip(250,385,suit,220);
-    else drawPips(rank,suit);
+    return;
   }
+
+  /* Cartes à points : on ne touche pas au modèle existant. */
+  svg.setAttribute("viewBox","0 0 500 700");
+  roundedRect(5,5,490,690,30,"#fff","#d0d0d0",2);
+  roundedRect(18,18,464,664,24,"none","#eeeeee",1);
+  text(52,72,rank,58,"700",ink,"middle");
+  text(52,119,suitSymbol[suit],40,"700",ink,"middle");
+  const corner=el("g",{transform:"rotate(180 448 628)"});
+  text(52,72,rank,58,"700",ink,"middle",corner);
+  text(52,119,suitSymbol[suit],40,"700",ink,"middle",corner);
+  if(rank==="A") pip(250,385,suit,220);
+  else drawPips(rank,suit);
 }
 
 function reveal(){
