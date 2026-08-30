@@ -218,8 +218,7 @@ function startListening(){
       if(found){
         detected=found;
         showStatus("Carte mémorisée discrètement.");
-        // L'écoute continue jusqu'à 2 minutes. La révélation se fait
-        // uniquement quand le téléphone est retourné/déclenché.
+        armFlipReveal();
       }else if(heard){
         showStatus("J'ai entendu : « "+heard+" »");
         instruction.textContent="Carte non reconnue. Essaie « 8 de cœur », « dame de trèfle », etc.";
@@ -316,20 +315,49 @@ function reveal(){
 }
 
 
-let pressTimer=null;
-document.addEventListener("touchstart",()=>{
-  if(!detected) return;
-  pressTimer=setTimeout(()=>reveal(),700);
-},{passive:true});
-document.addEventListener("touchend",()=>{
-  if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
-},{passive:true});
-
 start.onclick=startListening;
+// Révélation automatique au retournement du téléphone.
+let phoneWasFaceDown=false;
+let orientationArmed=false;
+
+function handleOrientation(e){
+  if(!detected) return;
+  const beta=e.beta;
+  if(typeof beta!=="number") return;
+
+  // Téléphone à plat écran vers le haut : beta proche de 0°.
+  // Écran vers le bas : beta proche de ±180°.
+  const faceUp=Math.abs(beta)<55;
+  const faceDown=Math.abs(beta)>125;
+
+  if(!orientationArmed) return;
+
+  if(faceDown){
+    phoneWasFaceDown=true;
+  }else if(faceUp && phoneWasFaceDown){
+    phoneWasFaceDown=false;
+    orientationArmed=false;
+    reveal();
+  }
+}
+
+window.addEventListener("deviceorientation",handleOrientation);
+
+function armFlipReveal(){
+  phoneWasFaceDown=false;
+  orientationArmed=false;
+  setTimeout(()=>{
+    if(detected) orientationArmed=true;
+  },1500);
+}
+
+
 
 again.onclick=()=>{
   if(listenTimer) clearTimeout(listenTimer);
   window.predictionListenUntil=0;
+  phoneWasFaceDown=false;
+  orientationArmed=false;
   try{if(rec) rec.stop();}catch(e){}
   detected=null;
   listening=false;
