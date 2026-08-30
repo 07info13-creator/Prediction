@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Prédiction</title>
+<title>Prédiction — correction cœur</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;background:#090909;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
@@ -79,36 +79,44 @@ function clean(text){
 }
 
 function detect(text){
-  // Normalisation robuste pour les variantes de reconnaissance vocale de Chrome.
+  // Analyse séparément la valeur et la couleur.
+  // Le mot « de » et les variantes « cœur/coeur/coeurs » sont ignorés.
   const t=clean(text);
-  let r=null, s=null;
 
-  // Valeur : on accepte aussi bien les chiffres que les nombres prononcés.
+  let r=null;
+  let s=null;
+
   const rankTests=[
-    [/\b10\b|\bdix\b|\bten\b/,"10"],
-    [/\b9\b|\bneuf\b|\bnine\b/,"9"],
-    [/\b8\b|\bhuit\b|\beight\b/,"8"],
-    [/\b7\b|\bsept\b|\bseven\b/,"7"],
-    [/\b6\b|\bsix\b/,"6"],
-    [/\b5\b|\bcinq\b|\bfive\b/,"5"],
-    [/\b4\b|\bquatre\b|\bfour\b/,"4"],
-    [/\b3\b|\btrois\b|\bthree\b/,"3"],
-    [/\b2\b|\bdeux\b|\btwo\b/,"2"],
-    [/\b1\b|\bas\b|\bace\b|\bun\b|\bune\b/,"A"],
-    [/\bvalet\b|\bjack\b|\bj\b/,"J"],
-    [/\bdame\b|\bqueen\b|\bq\b/,"Q"],
-    [/\broi\b|\bking\b|\bk\b/,"K"]
+    [/\b(?:10|dix|ten)\b/,"10"],
+    [/\b(?:9|neuf|nine)\b/,"9"],
+    [/\b(?:8|huit|eight)\b/,"8"],
+    [/\b(?:7|sept|seven)\b/,"7"],
+    [/\b(?:6|six)\b/,"6"],
+    [/\b(?:5|cinq|five)\b/,"5"],
+    [/\b(?:4|quatre|four)\b/,"4"],
+    [/\b(?:3|trois|three)\b/,"3"],
+    [/\b(?:2|deux|two)\b/,"2"],
+    [/\b(?:1|as|ace|un|une)\b/,"A"],
+    [/\b(?:valet|jack|j)\b/,"J"],
+    [/\b(?:dame|queen|q)\b/,"Q"],
+    [/\b(?:roi|king|k)\b/,"K"]
   ];
+
   for(const [re,val] of rankTests){
     if(re.test(t)){ r=val; break; }
   }
 
-  // Couleur : on tolère singulier/pluriel, accents déjà supprimés par clean(),
-  // et les variantes anglaises de Chrome.
-  if(/\bcoeur(?:s)?\b|\bheart(?:s)?\b/.test(t)) s="♥";
-  else if(/\bcarreau(?:x)?\b|\bdiamond(?:s)?\b/.test(t)) s="♦";
-  else if(/\btrefle(?:s)?\b|\bclub(?:s)?\b/.test(t)) s="♣";
-  else if(/\bpique(?:s)?\b|\bspade(?:s)?\b/.test(t)) s="♠";
+  // « cœur » est normalisé en « coeur » par clean().
+  // On accepte aussi quelques variantes que la reconnaissance vocale
+  // peut produire autour du mot cœur.
+  if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="♥";
+  else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="♦";
+  else if(/\b(?:trefle|trefles|club|clubs)\b/.test(t)) s="♣";
+  else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="♠";
+
+  // Sécurité supplémentaire : si la phrase contient clairement
+  // une valeur + « cœur », on force bien la couleur cœur.
+  if(r && /\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="♥";
 
   return r && s ? r+s : null;
 }
@@ -269,8 +277,6 @@ function reveal(){
 }
 
 start.onclick=startListening;
-
-document.addEventListener("dblclick",()=>reveal());
 
 again.onclick=()=>{
   try{if(rec) rec.stop();}catch(e){}
