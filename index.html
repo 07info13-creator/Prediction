@@ -140,36 +140,45 @@ function detect(text){
    prioritaire sur une mauvaise alternative du type « as ».
 */
 function detectBest(candidates){
-  let best=null;
-  let bestScore=-Infinity;
+  const parsed=[];
 
   for(const item of candidates){
     const text=typeof item==="string" ? item : item.text;
     const confidence=typeof item==="string" ? 0 : (Number(item.confidence)||0);
     if(!text) continue;
-
     const code=detect(text);
-    if(!code) continue;
+    if(code) parsed.push({code,text,confidence,t:clean(text)});
+  }
 
-    const rank=code.slice(0,-1);
-    let score=confidence*100;
+  if(!parsed.length) return null;
 
-    /* Les trois figures sont volontairement très prioritaires. */
-    if(rank==="J"||rank==="Q"||rank==="K") score+=1000;
+  /*
+     Android peut parfois confondre un nombre avec une figure (notamment
+     « sept » avec « valet »). On ne donne donc plus de priorité automatique
+     aux figures. La confiance de reconnaissance reste le critère principal.
+  */
+  parsed.sort((a,b)=>b.confidence-a.confidence);
+  let best=parsed[0];
 
-    /* Une transcription contenant explicitement le mot de la figure reçoit
-       encore un bonus, même si la confiance Android est faible. */
-    const t=clean(text);
-    if(rank==="J" && /\b(?:valet|jack|j|valais|valait|valets)\b/.test(t)) score+=500;
-    if(rank==="Q" && /\b(?:dame|queen|q|damme|dames)\b/.test(t)) score+=500;
-    if(rank==="K" && /\b(?:roi|roy|king|k|rois)\b/.test(t)) score+=500;
-
-    if(score>bestScore){
-      bestScore=score;
-      best=code;
+  /*
+     Si une figure et une valeur 2–10 sont en concurrence, on demande à la
+     figure d'être nettement plus sûre (+0,18) avant de l'imposer. Cela évite
+     précisément que « sept de pique » devienne « valet de pique » à cause
+     d'une alternative Android légèrement mieux classée.
+  */
+  const numeric=parsed.filter(x=>/^(?:2|3|4|5|6|7|8|9|10)$/.test(x.code.slice(0,-1)));
+  const figures=parsed.filter(x=>/^(?:J|Q|K)$/.test(x.code.slice(0,-1)));
+  if(numeric.length && figures.length){
+    const bestNumeric=numeric[0];
+    const bestFigure=figures[0];
+    if(bestFigure.confidence < bestNumeric.confidence + 0.18){
+      best=bestNumeric;
+    }else{
+      best=bestFigure;
     }
   }
-  return best;
+
+  return best.code;
 }
 
 let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
