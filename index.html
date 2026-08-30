@@ -217,9 +217,8 @@ function handleOrientation(e){
   /* Le geste attendu est : téléphone écran vers le bas, puis retourné
      écran vers le haut. On ne révèle donc pas prématurément quand il est
      simplement posé face contre la table. */
-  // Seuils volontairement plus tolérants pour accepter un retournement imparfait.
-  const faceUp=Math.abs(e.beta)<85;
-  const faceDown=Math.abs(e.beta)>95;
+  const faceUp=Math.abs(e.beta)<55;
+  const faceDown=Math.abs(e.beta)>125;
 
   if(faceDown){
     phoneWasFaceDown=true;
