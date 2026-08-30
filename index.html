@@ -182,12 +182,11 @@ function detectBest(candidates){
 }
 
 let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
-let orientationArmed=false, revealTimer=null;
 window.predictionListenUntil=0;
 
 function startListening(){
-  detected=null; restarting=false; orientationArmed=false;
-  if(revealTimer) clearTimeout(revealTimer);
+  detected=null; restarting=false;
+  if(listenTimer) clearTimeout(listenTimer);
   window.predictionListenUntil=Date.now()+120000;
   if(listenTimer) clearTimeout(listenTimer);
   listenTimer=setTimeout(()=>{
@@ -225,16 +224,16 @@ function startListening(){
         }
       }
 
-      /* Ne prend plus aveuglément la première alternative. */
       const found=detectBest(candidates);
 
       if(found && !detected){
         detected=found;
-        /* La carte est mémorisée puis le micro s'arrête :
-           aucune écoute inutile après reconnaissance. */
         try{if(rec)rec.stop()}catch(e){}
         listening=false;
-        armFlipReveal();
+
+        // Plus besoin de retourner le téléphone :
+        // la carte est révélée immédiatement après la reconnaissance vocale.
+        reveal();
       }
     };
 
@@ -264,62 +263,6 @@ function startListening(){
 function safeRestart(){
   try{if(rec)rec.start()}catch(e){}
 }
-
-function armFlipReveal(){
-  phoneWasFaceDown=false;
-  orientationArmed=false;
-  if(revealTimer) clearTimeout(revealTimer);
-  /* Laisse le temps de poser le téléphone avant d'armer le geste. */
-  setTimeout(()=>{
-    if(detected) orientationArmed=true;
-  },1500);
-}
-
-let phoneWasFaceDown=false;
-
-function handleOrientation(e){
-  if(!detected || !orientationArmed) return;
-  if(typeof e.beta!=="number") return;
-
-  /* Le geste attendu est : téléphone écran vers le bas, puis retourné
-     écran vers le haut. On ne révèle donc pas prématurément quand il est
-     simplement posé face contre la table. */
-  // Seuils volontairement plus tolérants pour accepter un retournement imparfait.
-  const angle=Math.abs(e.beta);
-  const faceUp=angle<100;
-  const faceDown=angle>80;
-
-  if(faceDown){
-    phoneWasFaceDown=true;
-  }else if(faceUp && phoneWasFaceDown){
-    phoneWasFaceDown=false;
-    orientationArmed=false;
-    if(revealTimer) clearTimeout(revealTimer);
-    revealTimer=setTimeout(()=>{
-      if(detected) reveal();
-    },250);
-  }
-}
-
-window.addEventListener("deviceorientation",handleOrientation);
-window.addEventListener("deviceorientationabsolute",handleOrientation);
-
-/* Sur certains Android récents, le capteur demande une permission. */
-async function requestOrientationPermission(){
-  try{
-    if(typeof DeviceOrientationEvent!=="undefined" &&
-       typeof DeviceOrientationEvent.requestPermission==="function"){
-      const p=await DeviceOrientationEvent.requestPermission();
-      if(p!=="granted") return false;
-    }
-  }catch(e){}
-  return true;
-}
-
-start.onclick=async()=>{
-  await requestOrientationPermission();
-  startListening();
-};
 
 /* ---------- Dessin d'un jeu de cartes classique ---------- */
 
@@ -420,7 +363,6 @@ function reveal(){
   listening=false;
   if(listenTimer)clearTimeout(listenTimer);
   window.predictionListenUntil=0;
-  orientationArmed=false;
   renderCard(detected);
   card.style.display="flex";
 }
@@ -430,7 +372,6 @@ function reveal(){
 card.addEventListener("click",()=>{
   card.style.display="none";
   detected=null;
-  orientationArmed=false;
   if(revealTimer)clearTimeout(revealTimer);
   start.style.display="block";
 });
