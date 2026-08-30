@@ -123,6 +123,8 @@ function detect(text){
 
 let rec=null, detected=null, listening=false;
 let finalTranscript="";
+let listenTimer=null;
+let restarting=false;
 
 function showStatus(msg){
   status.textContent=msg;
@@ -132,6 +134,24 @@ function showStatus(msg){
 function startListening(){
   detected=null;
   finalTranscript="";
+  restarting=false;
+
+  // Fenêtre d'écoute maximale : 2 minutes.
+  // La carte est mémorisée dès qu'elle est reconnue, mais n'est pas révélée
+  // automatiquement : le magicien la révèle ensuite en retournant le téléphone.
+  window.predictionListenUntil=Date.now()+120000;
+  if(listenTimer) clearTimeout(listenTimer);
+  listenTimer=setTimeout(()=>{
+    window.predictionListenUntil=0;
+    try{if(rec) rec.stop();}catch(e){}
+    listening=false;
+    listen.style.display="none";
+    if(detected){
+      showStatus("Carte mémorisée.");
+    }else{
+      showStatus("Temps d'écoute terminé. Aucune carte reconnue.");
+    }
+  },120000);
 
   if(!SR){
     instruction.textContent="La reconnaissance vocale n'est pas disponible ici. Ouvre cette page dans Google Chrome sur Android.";
@@ -146,7 +166,7 @@ function startListening(){
     // Important : un seul résultat final.
     // Cela évite le doublage « huit huit » provoqué par
     // l'assemblage des résultats intermédiaires de Chrome.
-    rec.continuous=false;
+    rec.continuous=true;
     rec.interimResults=false;
     rec.maxAlternatives=5;
 
@@ -197,8 +217,9 @@ function startListening(){
 
       if(found){
         detected=found;
-        showStatus("J'ai entendu : « "+heard+" »");
-        setTimeout(reveal,600);
+        showStatus("Carte mémorisée discrètement.");
+        // L'écoute continue jusqu'à 2 minutes. La révélation se fait
+        // uniquement quand le téléphone est retourné/déclenché.
       }else if(heard){
         showStatus("J'ai entendu : « "+heard+" »");
         instruction.textContent="Carte non reconnue. Essaie « 8 de cœur », « dame de trèfle », etc.";
@@ -240,9 +261,27 @@ function startListening(){
 
     rec.onend=()=>{
       listening=false;
-      listen.style.display="none";
-      // Pas de redémarrage automatique : cela évite les doubles écoutes
-      // et les transcriptions répétées sur Android.
+
+      // Chrome/Android peut couper SpeechRecognition après un court silence.
+      // On relance automatiquement pendant la fenêtre d'écoute, sans
+      // concaténer les anciennes transcriptions.
+      if(detected) return;
+
+      if(Date.now() < window.predictionListenUntil && !restarting){
+        restarting=true;
+        setTimeout(()=>{
+          restarting=false;
+          if(!detected && Date.now() < window.predictionListenUntil){
+            try{
+              rec.start();
+            }catch(e){
+              // Un démarrage déjà en cours peut provoquer InvalidStateError.
+            }
+          }
+        },350);
+      }else{
+        listen.style.display="none";
+      }
     };
 
     rec.start();
@@ -276,9 +315,21 @@ function reveal(){
   again.style.display="block";
 }
 
+
+let pressTimer=null;
+document.addEventListener("touchstart",()=>{
+  if(!detected) return;
+  pressTimer=setTimeout(()=>reveal(),700);
+},{passive:true});
+document.addEventListener("touchend",()=>{
+  if(pressTimer){clearTimeout(pressTimer);pressTimer=null;}
+},{passive:true});
+
 start.onclick=startListening;
 
 again.onclick=()=>{
+  if(listenTimer) clearTimeout(listenTimer);
+  window.predictionListenUntil=0;
   try{if(rec) rec.stop();}catch(e){}
   detected=null;
   listening=false;
