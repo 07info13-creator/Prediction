@@ -2,65 +2,44 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Prédiction</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Prédiction — correction cœur</title>
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;width:100%;height:100%;background:#090909;
-  color:#fff;font-family:Arial,sans-serif;overflow:hidden;
-  touch-action:manipulation;
-}
-#app{
-  width:100%;height:100%;display:flex;align-items:center;
-  justify-content:center;flex-direction:column;text-align:center;
-}
-#start{
-  background:#fff;color:#111;border:0;border-radius:30px;
-  padding:16px 26px;font-size:17px;
-}
-#prediction,#instruction,#listen,#status,#again{display:none}
-
-/* Révélation : carte de vraies proportions 5:7, plein écran. */
-#card{
-  display:none;
-  position:fixed;
-  inset:0;
-  width:100vw;
-  height:100vh;
-  background:#090909;
-  align-items:center;
-  justify-content:center;
-  z-index:20;
-}
-#cardSvg{
-  display:block;
-  height:100vh;
-  width:auto;
-  max-width:100vw;
-  aspect-ratio:5/7;
-}
-@media (max-aspect-ratio:5/7){
-  #cardSvg{width:96vw;height:auto;max-height:96vh}
-}
+html,body{margin:0;width:100%;height:100%;background:#090909;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
+#app{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}
+#prediction{font-size:28px;letter-spacing:5px}
+#instruction{margin-top:22px;font-size:15px;opacity:.65;max-width:340px;line-height:1.5}
+#start{margin-top:28px;background:#fff;color:#111;border:0;border-radius:28px;padding:15px 25px;font-size:17px}
+#listen{display:none;font-size:18px;opacity:.8}
+#status{display:none;margin-top:14px;font-size:13px;opacity:.55;max-width:340px;line-height:1.4}
+#card{display:none;width:min(76vw,430px);aspect-ratio:2/3;background:#fff;border-radius:22px;align-items:center;justify-content:center;box-shadow:0 8px 45px #000}
+#cardText{font-size:min(28vw,155px);font-weight:bold}
+#again{display:none;position:absolute;bottom:24px;border:0;background:#333;color:#fff;border-radius:22px;padding:10px 16px}
+.red{color:#c00}.black{color:#111}
 </style>
 </head>
 <body>
 <div id="app">
+  <div id="prediction">PRÉDICTION</div>
+  <div id="instruction">Dis simplement la valeur et la couleur, par exemple « 8 de cœur ».</div>
   <button id="start">Démarrer la prédiction</button>
-  <div id="listen">●</div>
+  <div id="listen">● Écoute…</div>
   <div id="status"></div>
-  <div id="card"><svg id="cardSvg" viewBox="0 0 500 700" aria-hidden="true"></svg></div>
-  <button id="again" aria-hidden="true"></button>
+  <div id="card"><div id="cardText"></div></div>
+  <button id="again">Nouvelle prédiction</button>
 </div>
 
 <script>
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const prediction=document.getElementById("prediction");
+const instruction=document.getElementById("instruction");
 const start=document.getElementById("start");
 const listen=document.getElementById("listen");
 const status=document.getElementById("status");
 const card=document.getElementById("card");
-const svg=document.getElementById("cardSvg");
+const cardText=document.getElementById("cardText");
+const again=document.getElementById("again");
 
 const ranks={
   "as":"A","ace":"A","un":"A","une":"A","1":"A",
@@ -79,320 +58,319 @@ const ranks={
 };
 
 const suits={
-  "coeur":"H","coeurs":"H","heart":"H","hearts":"H",
-  "carreau":"D","carreaux":"D","diamond":"D","diamonds":"D",
-  "trèfle":"C","trèfles":"C","trefle":"C","trefles":"C","tref":"C",
-  "club":"C","clubs":"C",
-  "pique":"S","piques":"S","spade":"S","spades":"S"
+  "coeur":"♥","coeurs":"♥","heart":"♥","hearts":"♥",
+  "carreau":"♦","carreaux":"♦","diamond":"♦","diamonds":"♦",
+  "trèfle":"♣","trèfles":"♣","trefle":"♣","trefles":"♣","tref":"♣",
+  "club":"♣","clubs":"♣",
+  "pique":"♠","piques":"♠","spade":"♠","spades":"♠"
 };
 
 function clean(text){
   return text.toLowerCase()
+    // « cœur » contient la ligature œ, que NFD ne transforme pas.
+    // On la convertit explicitement afin de reconnaître « cœur » et « coeur ».
     .replace(/œ/g,"oe").replace(/æ/g,"ae")
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[’']/g," ").replace(/-/g," ")
+    .replace(/[’']/g," ")
+    .replace(/-/g," ")
     .replace(/[.,!?;:()[\]{}]/g," ")
-    .replace(/\s+/g," ").trim();
+    .replace(/\s+/g," ")
+    .trim();
 }
 
 function detect(text){
+  // Analyse séparément la valeur et la couleur.
+  // Le mot « de » et les variantes « cœur/coeur/coeurs » sont ignorés.
   const t=clean(text);
-  let r=null,s=null;
 
-  /*
-     IMPORTANT : les figures sont testées AVANT les valeurs numériques.
-     La reconnaissance vocale Android peut parfois transformer « valet »
-     en « as », « dame » en « as », etc. Les formes phonétiques courantes
-     ci-dessous permettent aussi de récupérer certaines transcriptions
-     imparfaites.
-  */
-  const figureTests=[
-    [/\b(?:valet|jack|j|valais|valait|valets)\b/,"J"],
-    [/\b(?:dame|queen|q|damme|dames)\b/,"Q"],
-    [/\b(?:roi|roy|king|k|rois)\b/,"K"]
+  let r=null;
+  let s=null;
+
+  const rankTests=[
+    [/\b(?:10|dix|ten)\b/,"10"],
+    [/\b(?:9|neuf|nine)\b/,"9"],
+    [/\b(?:8|huit|eight)\b/,"8"],
+    [/\b(?:7|sept|seven)\b/,"7"],
+    [/\b(?:6|six)\b/,"6"],
+    [/\b(?:5|cinq|five)\b/,"5"],
+    [/\b(?:4|quatre|four)\b/,"4"],
+    [/\b(?:3|trois|three)\b/,"3"],
+    [/\b(?:2|deux|two)\b/,"2"],
+    [/\b(?:1|as|ace|un|une)\b/,"A"],
+    [/\b(?:valet|jack|j)\b/,"J"],
+    [/\b(?:dame|queen|q)\b/,"Q"],
+    [/\b(?:roi|king|k)\b/,"K"]
   ];
-  for(const [re,val] of figureTests){
-    if(re.test(t)){r=val;break;}
+
+  for(const [re,val] of rankTests){
+    if(re.test(t)){ r=val; break; }
   }
 
-  /* Si aucune figure n'est explicitement trouvée, on analyse les autres valeurs. */
-  if(!r){
-    const rankTests=[
-      [/\b(?:10|dix|ten)\b/,"10"],[ /\b(?:9|neuf|nine)\b/,"9"],
-      [/\b(?:8|huit|eight)\b/,"8"],[ /\b(?:7|sept|seven)\b/,"7"],
-      [/\b(?:6|six)\b/,"6"],[ /\b(?:5|cinq|five)\b/,"5"],
-      [/\b(?:4|quatre|four)\b/,"4"],[ /\b(?:3|trois|three)\b/,"3"],
-      [/\b(?:2|deux|two)\b/,"2"],[ /\b(?:1|as|ace|un|une)\b/,"A"]
-    ];
-    for(const [re,val] of rankTests){ if(re.test(t)){r=val;break;} }
-  }
+  // « cœur » est normalisé en « coeur » par clean().
+  // On accepte aussi quelques variantes que la reconnaissance vocale
+  // peut produire autour du mot cœur.
+  if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="♥";
+  else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="♦";
+  else if(/\b(?:trefle|trefles|club|clubs)\b/.test(t)) s="♣";
+  else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="♠";
 
-  if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="H";
-  else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="D";
-  else if(/\b(?:trefle|trefles|club|clubs)\b/.test(t)) s="C";
-  else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="S";
-  return r&&s ? r+s : null;
+  // Sécurité supplémentaire : si la phrase contient clairement
+  // une valeur + « cœur », on force bien la couleur cœur.
+  if(r && /\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="♥";
+
+  return r && s ? r+s : null;
 }
 
-/*
-   Analyse toutes les alternatives proposées par Android au lieu de prendre
-   systématiquement la première. Une figure explicitement reconnue est
-   prioritaire sur une mauvaise alternative du type « as ».
-*/
-function detectBest(candidates){
-  const parsed=[];
+let rec=null, detected=null, listening=false;
+let finalTranscript="";
+let listenTimer=null;
+let restarting=false;
 
-  for(const item of candidates){
-    const text=typeof item==="string" ? item : item.text;
-    const confidence=typeof item==="string" ? 0 : (Number(item.confidence)||0);
-    if(!text) continue;
-    const code=detect(text);
-    if(code) parsed.push({code,text,confidence,t:clean(text)});
-  }
-
-  if(!parsed.length) return null;
-
-  /*
-     Android peut parfois confondre un nombre avec une figure (notamment
-     « sept » avec « valet »). On ne donne donc plus de priorité automatique
-     aux figures. La confiance de reconnaissance reste le critère principal.
-  */
-  parsed.sort((a,b)=>b.confidence-a.confidence);
-  let best=parsed[0];
-
-  /*
-     Si une figure et une valeur 2–10 sont en concurrence, on demande à la
-     figure d'être nettement plus sûre (+0,18) avant de l'imposer. Cela évite
-     précisément que « sept de pique » devienne « valet de pique » à cause
-     d'une alternative Android légèrement mieux classée.
-  */
-  const numeric=parsed.filter(x=>/^(?:2|3|4|5|6|7|8|9|10)$/.test(x.code.slice(0,-1)));
-  const figures=parsed.filter(x=>/^(?:J|Q|K)$/.test(x.code.slice(0,-1)));
-  if(numeric.length && figures.length){
-    const bestNumeric=numeric[0];
-    const bestFigure=figures[0];
-    if(bestFigure.confidence < bestNumeric.confidence + 0.18){
-      best=bestNumeric;
-    }else{
-      best=bestFigure;
-    }
-  }
-
-  return best.code;
+function showStatus(msg){
+  status.textContent=msg;
+  status.style.display="block";
 }
-
-let rec=null, detected=null, listening=false, listenTimer=null, restarting=false, revealTimer=null;
-window.predictionListenUntil=0;
 
 function startListening(){
-  detected=null; restarting=false;
-  status.textContent="Dites votre carte…";
-  if(listenTimer) clearTimeout(listenTimer);
+  detected=null;
+  finalTranscript="";
+  restarting=false;
+
+  // Fenêtre d'écoute maximale : 2 minutes.
+  // La carte est mémorisée dès qu'elle est reconnue, mais n'est pas révélée
+  // automatiquement : le magicien la révèle ensuite en retournant le téléphone.
   window.predictionListenUntil=Date.now()+120000;
   if(listenTimer) clearTimeout(listenTimer);
   listenTimer=setTimeout(()=>{
     window.predictionListenUntil=0;
-    try{if(rec)rec.stop()}catch(e){}
+    try{if(rec) rec.stop();}catch(e){}
     listening=false;
+    listen.style.display="none";
+    if(detected){
+      showStatus("Carte mémorisée.");
+    }else{
+      showStatus("Temps d'écoute terminé. Aucune carte reconnue.");
+    }
   },120000);
 
-  if(!SR) return;
+  if(!SR){
+    instruction.textContent="La reconnaissance vocale n'est pas disponible ici. Ouvre cette page dans Google Chrome sur Android.";
+    showStatus("SpeechRecognition est indisponible.");
+    return;
+  }
 
   try{
     rec=new SR();
     rec.lang="fr-FR";
+
+    // Important : un seul résultat final.
+    // Cela évite le doublage « huit huit » provoqué par
+    // l'assemblage des résultats intermédiaires de Chrome.
     rec.continuous=true;
     rec.interimResults=false;
-    rec.maxAlternatives=10;
+    rec.maxAlternatives=5;
 
     rec.onstart=()=>{
       listening=true;
+      prediction.style.display="none";
+      instruction.style.display="none";
       start.style.display="none";
-      listen.style.display="none";
-      status.textContent="Dites votre carte…";
+      listen.style.display="block";
+      showStatus("Microphone actif — je t'écoute…");
+    };
+
+    rec.onaudiostart=()=>{
+      showStatus("Microphone actif — dis ta carte.");
+    };
+
+    rec.onspeechstart=()=>{
+      showStatus("Je t'entends…");
     };
 
     rec.onresult=e=>{
+      // Avec interimResults=false, on ne traite que le résultat final.
       const result=e.results[e.results.length-1];
       if(!result) return;
 
-      const candidates=[];
+      let candidates=[];
       for(let i=0;i<result.length;i++){
         if(result[i] && result[i].transcript){
-          candidates.push({
-            text:result[i].transcript.trim(),
-            confidence:result[i].confidence
-          });
+          candidates.push(result[i].transcript.trim());
         }
       }
 
-      // Détection principale + analyse directe de toute la phrase entendue.
-      let found=detectBest(candidates);
-      if(!found && candidates.length){
-        for(const c of candidates){
-          const direct=detect(c.text);
-          if(direct){ found=direct; break; }
+      // Chaque alternative est testée séparément.
+      // On ne les concatène JAMAIS.
+      let found=null;
+      let heard=candidates[0]||"";
+
+      for(const text of candidates){
+        const c=detect(text);
+        if(c){
+          found=c;
+          heard=text;
+          break;
         }
       }
 
-      if(found && !detected){
+      finalTranscript=heard;
+
+      if(found){
         detected=found;
-        try{if(rec)rec.stop()}catch(e){}
-        listening=false;
-        status.textContent="";
-        reveal();
+        showStatus("Carte mémorisée discrètement.");
+        armFlipReveal();
+      }else if(heard){
+        showStatus("J'ai entendu : « "+heard+" »");
+        instruction.textContent="Carte non reconnue. Essaie « 8 de cœur », « dame de trèfle », etc.";
+        instruction.style.display="block";
+        listen.style.display="none";
+        start.style.display="block";
       }
     };
 
-    rec.onerror=(e)=>{
+    rec.onnomatch=()=>{
+      showStatus("Je n'ai pas compris la carte.");
+      instruction.textContent="Réessaie en disant lentement : « 8 de cœur », « 7 de trèfle », etc.";
+      instruction.style.display="block";
+      listen.style.display="none";
+      start.style.display="block";
+    };
+
+    rec.onerror=e=>{
       listening=false;
-      if(e && e.error==="not-allowed"){
-        status.textContent="Autorisez le microphone puis relancez.";
-        start.style.display="block";
-        return;
+      console.log("SpeechRecognition error:",e.error,e.message);
+
+      if(e.error==="not-allowed" || e.error==="service-not-allowed"){
+        instruction.textContent="Chrome bloque l'accès au microphone. Vérifie l'autorisation du microphone pour ce site.";
+      }else if(e.error==="audio-capture"){
+        instruction.textContent="Le microphone n'est pas accessible.";
+      }else if(e.error==="network"){
+        instruction.textContent="La reconnaissance vocale Chrome nécessite une connexion Internet.";
+      }else if(e.error==="no-speech"){
+        instruction.textContent="Je n'ai pas entendu de parole. Recommence et parle après « Je t'écoute… ».";
+      }else{
+        instruction.textContent="Problème de reconnaissance (« "+e.error+" »). Recommence.";
       }
-      if(Date.now()<window.predictionListenUntil && !detected){
-        setTimeout(()=>{ if(!detected) safeRestart(); },400);
-      }
+
+      instruction.style.display="block";
+      listen.style.display="none";
+      start.style.display="block";
+      showStatus("Erreur : "+e.error);
     };
 
     rec.onend=()=>{
       listening=false;
+
+      // Chrome/Android peut couper SpeechRecognition après un court silence.
+      // On relance automatiquement pendant la fenêtre d'écoute, sans
+      // concaténer les anciennes transcriptions.
       if(detected) return;
-      if(Date.now()<window.predictionListenUntil && !restarting){
+
+      if(Date.now() < window.predictionListenUntil && !restarting){
         restarting=true;
         setTimeout(()=>{
           restarting=false;
-          if(!detected && Date.now()<window.predictionListenUntil) safeRestart();
+          if(!detected && Date.now() < window.predictionListenUntil){
+            try{
+              rec.start();
+            }catch(e){
+              // Un démarrage déjà en cours peut provoquer InvalidStateError.
+            }
+          }
         },350);
+      }else{
+        listen.style.display="none";
       }
     };
 
     rec.start();
-  }catch(e){}
-}
 
-function safeRestart(){
-  try{if(rec)rec.start()}catch(e){}
-}
-
-/* ---------- Dessin d'un jeu de cartes classique ---------- */
-
-const NS="http://www.w3.org/2000/svg";
-const RED="#d71920", BLACK="#111";
-const suitSymbol={H:"♥",D:"♦",C:"♣",S:"♠"};
-
-function el(tag,attrs={},parent=svg){
-  const n=document.createElementNS(NS,tag);
-  for(const [k,v] of Object.entries(attrs)) n.setAttribute(k,v);
-  parent.appendChild(n);
-  return n;
-}
-function text(x,y,str,size,weight="700",fill=BLACK,anchor="middle",parent=svg){
-  return el("text",{x,y,"font-family":"Georgia,Times New Roman,serif","font-size":size,"font-weight":weight,fill,"text-anchor":anchor},parent).textContent=str;
-}
-function pip(x,y,suit,size=48,parent=svg){
-  text(x,y,suitSymbol[suit],size,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",parent);
-}
-function roundedRect(x,y,w,h,rx,fill,stroke,sw,parent=svg){
-  el("rect",{x,y,width:w,height:h,rx,fill,stroke,"stroke-width":sw},parent);
-}
-
-const pipPositions={
-  "2":[[250,205],[250,495]],
-  "3":[[250,195],[250,350],[250,505]],
-  "4":[[165,205],[335,205],[165,495],[335,495]],
-  "5":[[165,205],[335,205],[250,350],[165,495],[335,495]],
-  "6":[[165,190],[335,190],[165,350],[335,350],[165,510],[335,510]],
-  "7":[[165,180],[335,180],[250,265],[165,420],[335,420],[165,540],[335,540]],
-  "8":[[165,175],[335,175],[250,260],[165,350],[335,350],[250,440],[165,525],[335,525]],
-  "9":[[165,170],[335,170],[165,275],[335,275],[250,350],[165,425],[335,425],[165,530],[335,530]],
-  "10":[[165,165],[335,165],[250,235],[165,300],[335,300],[250,350],[165,400],[335,400],[250,465],[165,535],[335,535]]
-};
-
-function drawPips(rank,suit){
-  const pts=pipPositions[rank]||[];
-  const g=el("g",{});
-  pts.forEach(([x,y],i)=>{
-    /* In a traditional layout, the lower half is inverted. */
-    const lower=y>350;
-    const t=text(x,y+(lower?18:0),suitSymbol[suit],44,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-    if(lower) t.setAttribute("transform",`rotate(180 ${x} ${y})`);
-  });
-}
-
-function drawIndex(rank,suit,x,y,scale=1,rot=0){
-  const g=el("g",{transform:`translate(${x} ${y}) rotate(${rot}) scale(${scale})`});
-  text(0,25,rank,55,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-  text(0,72,suitSymbol[suit],42,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-}
-
-function figureUrl(rank,suit){
-  const rankName={J:"jack",Q:"queen",K:"king"}[rank];
-  const suitName={C:"clubs",D:"diamonds",H:"hearts",S:"spades"}[suit];
-  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/English_pattern_${rankName}_of_${suitName}.svg`;
-}
-
-function drawCourt(rank,suit){
-  /*
-     Les figures utilisent de vraies cartes SVG du modèle classique, plutôt
-     qu'un dessin simplifié. Le fichier SVG externe est chargé comme image :
-     cela évite les problèmes de redimensionnement des personnages.
-  */
-  const url=figureUrl(rank,suit);
-  svg.setAttribute("viewBox","0 0 500 750");
-  const img=el("image",{x:0,y:0,width:500,height:750,href:url,"preserveAspectRatio":"xMidYMid meet"});
-  img.setAttributeNS("http://www.w3.org/1999/xlink","href",url);
-}
-
-function renderCard(code){
-  while(svg.firstChild) svg.removeChild(svg.firstChild);
-  const rank=code.slice(0,-1), suit=code.slice(-1);
-  const red=suit==="H"||suit==="D";
-  const ink=red?RED:BLACK;
-
-  if(rank==="J"||rank==="Q"||rank==="K"){
-    drawCourt(rank,suit);
-    return;
+  }catch(e){
+    console.error(e);
+    instruction.textContent="Impossible de démarrer la reconnaissance vocale. Recharge la page et réessaie.";
+    instruction.style.display="block";
+    showStatus("Erreur de démarrage.");
+    start.style.display="block";
+    listen.style.display="none";
   }
-
-  /* Cartes à points : on ne touche pas au modèle existant. */
-  svg.setAttribute("viewBox","0 0 500 700");
-  roundedRect(5,5,490,690,30,"#fff","#d0d0d0",2);
-  roundedRect(18,18,464,664,24,"none","#eeeeee",1);
-  text(52,72,rank,58,"700",ink,"middle");
-  text(52,119,suitSymbol[suit],40,"700",ink,"middle");
-  const corner=el("g",{transform:"rotate(180 448 628)"});
-  text(52,72,rank,58,"700",ink,"middle",corner);
-  text(52,119,suitSymbol[suit],40,"700",ink,"middle",corner);
-  if(rank==="A") pip(250,385,suit,220);
-  else drawPips(rank,suit);
 }
 
 function reveal(){
-  if(!detected) return;
-  try{if(rec)rec.stop()}catch(e){}
+  if(!detected){
+    instruction.textContent="Aucune carte reconnue. Appuie sur « Nouvelle prédiction » et recommence.";
+    instruction.style.display="block";
+    again.style.display="block";
+    return;
+  }
+
+  try{if(rec) rec.stop();}catch(e){}
   listening=false;
-  if(listenTimer)clearTimeout(listenTimer);
-  window.predictionListenUntil=0;
-  renderCard(detected);
+  listen.style.display="none";
+  status.style.display="none";
+
+  cardText.textContent=detected;
+  cardText.className=(detected.includes("♥")||detected.includes("♦"))?"red":"black";
   card.style.display="flex";
+  again.style.display="block";
 }
 
-/* Après révélation, un tap discret permet de préparer une nouvelle prédiction.
-   Il n'y a aucun texte ni bouton affiché sur la carte. */
-// Démarrage du tour : le bouton lance bien la reconnaissance vocale.
-start.addEventListener("click",()=>{
-  startListening();
-});
 
-card.addEventListener("click",()=>{
-  card.style.display="none";
+start.onclick=startListening;
+// Révélation automatique lorsque le téléphone est retourné écran vers le bas.
+// La carte est révélée pendant que le téléphone est posé face cachée,
+// afin qu'elle soit déjà visible lorsque le magicien le retourne vers le spectateur.
+let orientationArmed=false;
+let revealTimer=null;
+
+function handleOrientation(e){
+  if(!detected || !orientationArmed) return;
+  const beta=e.beta;
+  if(typeof beta!=="number") return;
+
+  // Écran vers le bas : beta proche de ±180°.
+  const faceDown=Math.abs(beta)>125;
+
+  if(faceDown){
+    orientationArmed=false;
+    // Petite temporisation pour éviter un déclenchement sur un mouvement bref.
+    if(revealTimer) clearTimeout(revealTimer);
+    revealTimer=setTimeout(()=>{
+      if(detected) reveal();
+    },700);
+  }
+}
+
+window.addEventListener("deviceorientation",handleOrientation);
+
+function armFlipReveal(){
+  orientationArmed=false;
+  if(revealTimer) clearTimeout(revealTimer);
+  // Laisse 1,5 seconde après la reconnaissance avant d'autoriser le retournement.
+  setTimeout(()=>{
+    if(detected) orientationArmed=true;
+  },1500);
+}
+
+
+
+again.onclick=()=>{
+  if(listenTimer) clearTimeout(listenTimer);
+  window.predictionListenUntil=0;
+  orientationArmed=false;
+  if(revealTimer) clearTimeout(revealTimer);
+  try{if(rec) rec.stop();}catch(e){}
   detected=null;
-  if(revealTimer)clearTimeout(revealTimer);
+  listening=false;
+  finalTranscript="";
+  card.style.display="none";
+  again.style.display="none";
+  prediction.style.display="block";
+  instruction.style.display="block";
+  instruction.textContent="Dis simplement la valeur et la couleur, par exemple « 8 de cœur ».";
+  status.style.display="none";
   start.style.display="block";
-});
-
+  listen.style.display="none";
+};
 </script>
 </body>
 </html>
