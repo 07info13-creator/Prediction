@@ -295,8 +295,8 @@ function drawCourt(rank,suit){
   const gold="#e8bd28", blue="#1f5aaa", white="#fff";
   const g=el("g",{});
 
-  /* Style inspiré des cartes de cour classiques : cadre bleu, panneaux or,
-     personnage richement coloré et parfaitement miroir. */
+  /* Cadre intérieur de la carte de cour. Les personnages sont dessinés
+     dans deux zones séparées afin de ne jamais dépasser du cadre. */
   roundedRect(42,62,416,576,18,white,"#d4d4d4",3,g);
   roundedRect(70,92,360,516,10,white,blue,6,g);
   el("rect",{x:78,y:100,width:344,height:250,rx:7,fill:gold},g);
@@ -304,57 +304,60 @@ function drawCourt(rank,suit){
   el("rect",{x:94,y:116,width:312,height:218,rx:5,fill:white},g);
   el("rect",{x:94,y:366,width:312,height:218,rx:5,fill:white},g);
 
-  function crown(parent){
-    el("path",{d:"M214 157 L225 130 L250 150 L275 130 L286 157 L278 173 L222 173 Z",fill:gold,stroke:BLACK,"stroke-width":4},parent);
-    el("circle",{cx:225,cy:132,r:4,fill:main},parent);
-    el("circle",{cx:275,cy:132,r:4,fill:main},parent);
-  }
   function figure(y,flip){
-    const tr=flip?`translate(0 ${2*y+205}) scale(1 -1)`: `translate(0 ${y})`;
+    const tr=flip?`translate(0 ${y+390}) scale(1 -1)`:`translate(0 ${y})`;
     const q=el("g",{transform:tr},g);
-    /* cape / shoulders */
-    el("path",{d:"M142 208 Q154 150 204 137 Q250 124 296 137 Q346 150 358 208 L331 327 L169 327 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-    el("path",{d:"M183 203 Q205 157 250 151 Q295 157 317 203 L302 327 L198 327 Z",fill:main,stroke:BLACK,"stroke-width":5},q);
-    /* face */
-    el("ellipse",{cx:250,cy:181,rx:43,ry:50,fill:"#f3d0a9",stroke:BLACK,"stroke-width":5},q);
+
+    /* Silhouette compacte : toute la figure tient dans ~190 unités. */
+    el("path",{d:"M145 185 Q154 125 205 105 Q250 88 295 105 Q346 125 355 185 L330 205 L170 205 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
+    el("path",{d:"M184 175 Q205 115 250 108 Q295 115 316 175 L300 205 L200 205 Z",fill:main,stroke:BLACK,"stroke-width":5},q);
+
+    /* Visage */
+    el("ellipse",{cx:250,cy:130,rx:42,ry:46,fill:"#f3d0a9",stroke:BLACK,"stroke-width":5},q);
+
+    /* Coiffure / couronne */
     if(rank==="K"){
-      crown(q);
-      el("path",{d:"M210 172 Q250 133 290 172 L286 145 Q250 125 214 145 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
+      el("path",{d:"M210 116 Q250 78 290 116 L285 96 Q250 75 215 96 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
+      el("circle",{cx:218,cy:94,r:4,fill:main},q);
+      el("circle",{cx:282,cy:94,r:4,fill:main},q);
     }else if(rank==="Q"){
-      el("path",{d:"M207 168 Q250 116 293 168 L286 141 Q250 118 214 141 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-      el("circle",{cx:250,cy:127,r:5,fill:main},q);
+      el("path",{d:"M207 116 Q250 68 293 116 L286 91 Q250 69 214 91 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
+      el("circle",{cx:250,cy:80,r:5,fill:main},q);
     }else{
-      el("path",{d:"M208 163 Q250 118 292 163 L283 143 Q250 124 217 143 Z",fill:main,stroke:BLACK,"stroke-width":4},q);
+      el("path",{d:"M208 113 Q250 70 292 113 L284 91 Q250 73 216 91 Z",fill:main,stroke:BLACK,"stroke-width":4},q);
     }
-    /* cheveux, visage */
-    el("path",{d:"M211 171 Q220 130 250 130 Q280 130 289 171 Q275 151 250 151 Q225 151 211 171",fill:BLACK},q);
-    el("circle",{cx:235,cy:180,r:4,fill:BLACK},q); el("circle",{cx:265,cy:180,r:4,fill:BLACK},q);
-    el("path",{d:"M238 199 Q250 206 262 199",fill:"none",stroke:BLACK,"stroke-width":4,"stroke-linecap":"round"},q);
-    /* manches */
-    el("path",{d:"M155 220 L112 292 L151 313 L191 254 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-    el("path",{d:"M345 220 L388 292 L349 313 L309 254 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
-    /* col / décor */
-    el("path",{d:"M183 211 Q250 248 317 211 L306 240 Q250 270 194 240 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-    el("path",{d:"M214 240 L286 240 L300 327 L200 327 Z",fill:blue,stroke:BLACK,"stroke-width":4},q);
-    /* emblème de la couleur */
-    text(250,292,suitSymbol[suit],54,"700",main,"middle",q);
-    /* attribut propre à la figure */
+    el("path",{d:"M211 120 Q220 82 250 82 Q280 82 289 120 Q274 101 250 101 Q226 101 211 120",fill:BLACK},q);
+    el("circle",{cx:235,cy:130,r:4,fill:BLACK},q);
+    el("circle",{cx:265,cy:130,r:4,fill:BLACK},q);
+    el("path",{d:"M238 149 Q250 156 262 149",fill:"none",stroke:BLACK,"stroke-width":4,"stroke-linecap":"round"},q);
+
+    /* Bras / manches */
+    el("path",{d:"M155 145 L112 192 L150 210 L190 164 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
+    el("path",{d:"M345 145 L388 192 L350 210 L310 164 Z",fill:blue,stroke:BLACK,"stroke-width":5},q);
+
+    /* Col et plastron */
+    el("path",{d:"M183 156 Q250 188 317 156 L306 180 Q250 204 194 180 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
+    el("path",{d:"M214 178 L286 178 L296 205 L204 205 Z",fill:blue,stroke:BLACK,"stroke-width":4},q);
+    text(250,198,suitSymbol[suit],31,"700",main,"middle",q);
+
+    /* Petit emblème propre à la figure */
     if(rank==="J"){
-      el("path",{d:"M214 274 L250 245 L286 274 L272 316 L228 316 Z",fill:white,stroke:BLACK,"stroke-width":4},q);
-      el("path",{d:"M250 249 L250 310",stroke:gold,"stroke-width":7},q);
+      el("path",{d:"M225 180 L250 162 L275 180 L267 203 L233 203 Z",fill:white,stroke:BLACK,"stroke-width":3},q);
+      el("path",{d:"M250 165 L250 201",stroke:gold,"stroke-width":5},q);
     }else if(rank==="Q"){
-      el("circle",{cx:250,cy:302,r:18,fill:gold,stroke:BLACK,"stroke-width":4},q);
-      text(250,311,"Q",24,"700",main,"middle",q);
+      el("circle",{cx:250,cy:193,r:11,fill:gold,stroke:BLACK,"stroke-width":3},q);
+      text(250,199,"Q",15,"700",main,"middle",q);
     }else{
-      el("path",{d:"M230 276 L270 276 L262 320 L238 320 Z",fill:gold,stroke:BLACK,"stroke-width":4},q);
-      el("path",{d:"M250 276 L250 320",stroke:main,"stroke-width":5},q);
+      el("path",{d:"M232 181 L268 181 L263 204 L237 204 Z",fill:gold,stroke:BLACK,"stroke-width":3},q);
+      el("path",{d:"M250 181 L250 204",stroke:main,"stroke-width":4},q);
     }
   }
 
-  figure(108,false);
-  figure(353,true);
+  /* Deux figures séparées, l'une au-dessus de l'autre. */
+  figure(128,false);
+  figure(262,true);
 
-  /* Indices intégrés dans le même dessin, sans doublon. */
+  /* Indices classiques dans les coins. */
   text(48,82,rank,58,"700",main,"middle",g);
   text(48,126,suitSymbol[suit],40,"700",main,"middle",g);
   const bottom=el("g",{transform:"rotate(180 452 618)"},g);
