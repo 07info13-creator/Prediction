@@ -181,11 +181,12 @@ function detectBest(candidates){
   return best.code;
 }
 
-let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
+let rec=null, detected=null, listening=false, listenTimer=null, restarting=false, revealTimer=null;
 window.predictionListenUntil=0;
 
 function startListening(){
   detected=null; restarting=false;
+  status.textContent="Dites votre carte…";
   if(listenTimer) clearTimeout(listenTimer);
   window.predictionListenUntil=Date.now()+120000;
   if(listenTimer) clearTimeout(listenTimer);
@@ -208,6 +209,7 @@ function startListening(){
       listening=true;
       start.style.display="none";
       listen.style.display="none";
+      status.textContent="Dites votre carte…";
     };
 
     rec.onresult=e=>{
@@ -224,19 +226,31 @@ function startListening(){
         }
       }
 
-      const found=detectBest(candidates);
+      // Détection principale + analyse directe de toute la phrase entendue.
+      let found=detectBest(candidates);
+      if(!found && candidates.length){
+        for(const c of candidates){
+          const direct=detect(c.text);
+          if(direct){ found=direct; break; }
+        }
+      }
 
       if(found && !detected){
         detected=found;
         try{if(rec)rec.stop()}catch(e){}
         listening=false;
-
-                reveal();
+        status.textContent="";
+        reveal();
       }
     };
 
-    rec.onerror=()=>{
+    rec.onerror=(e)=>{
       listening=false;
+      if(e && e.error==="not-allowed"){
+        status.textContent="Autorisez le microphone puis relancez.";
+        start.style.display="block";
+        return;
+      }
       if(Date.now()<window.predictionListenUntil && !detected){
         setTimeout(()=>{ if(!detected) safeRestart(); },400);
       }
