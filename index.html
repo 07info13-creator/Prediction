@@ -67,6 +67,9 @@ const suits={
 
 function clean(text){
   return text.toLowerCase()
+    // « cœur » contient la ligature œ, que NFD ne transforme pas.
+    // On la convertit explicitement afin de reconnaître « cœur » et « coeur ».
+    .replace(/œ/g,"oe").replace(/æ/g,"ae")
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .replace(/[’']/g," ")
     .replace(/-/g," ")
