@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#090909">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Prédiction</title>
 <style>
 *{box-sizing:border-box}
@@ -17,16 +20,16 @@ html,body{
 }
 #listen{display:none}
 #card{
-  display:none;position:fixed;inset:0;width:100vw;height:100vh;
+  display:none;position:fixed;inset:0;width:100vw;height:100dvh;
   background:#090909;align-items:center;justify-content:center;z-index:20;
 }
 #cardImage{
   display:block;
-  height:100vh;width:auto;max-width:100vw;object-fit:contain;
+  height:100dvh;width:auto;max-width:100vw;object-fit:contain;
   aspect-ratio:5/7;
 }
 @media (max-aspect-ratio:5/7){
-  #cardImage{width:100vw;height:auto;max-height:100vh}
+  #cardImage{width:100vw;height:auto;max-height:100dvh}
 }
 </style>
 </head>
@@ -108,6 +111,14 @@ function safeRestart(){
   try{if(rec)rec.start()}catch(e){}
 }
 
+async function enterFullscreen(){
+  try{
+    if(!document.fullscreenElement && document.documentElement.requestFullscreen){
+      await document.documentElement.requestFullscreen();
+    }
+  }catch(e){}
+}
+
 function startListening(){
   detected=null;
   cardImage.dataset.ready="0";
@@ -176,7 +187,8 @@ function startListening(){
   }catch(e){}
 }
 
-start.onclick=()=>{
+start.onclick=async()=>{
+  await enterFullscreen();
   startListening();
 };
 
