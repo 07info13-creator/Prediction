@@ -7,41 +7,26 @@
 <style>
 *{box-sizing:border-box}
 html,body{
-  margin:0;width:100%;height:100%;background:#090909;
-  color:#fff;font-family:Arial,sans-serif;overflow:hidden;
-  touch-action:manipulation;
+  margin:0;width:100%;height:100%;background:#090909;color:#fff;
+  font-family:Arial,sans-serif;overflow:hidden;touch-action:manipulation;
 }
-#app{
-  width:100%;height:100%;display:flex;align-items:center;
-  justify-content:center;flex-direction:column;text-align:center;
-}
+#app{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 #start{
   background:#fff;color:#111;border:0;border-radius:30px;
   padding:16px 26px;font-size:17px;
 }
-#prediction,#instruction,#listen,#status,#again{display:none}
-
-/* Révélation : carte de vraies proportions 5:7, plein écran. */
+#listen{display:none}
 #card{
-  display:none;
-  position:fixed;
-  inset:0;
-  width:100vw;
-  height:100vh;
-  background:#090909;
-  align-items:center;
-  justify-content:center;
-  z-index:20;
+  display:none;position:fixed;inset:0;width:100vw;height:100vh;
+  background:#090909;align-items:center;justify-content:center;z-index:20;
 }
-#cardSvg{
+#cardImage{
   display:block;
-  height:100vh;
-  width:auto;
-  max-width:100vw;
+  height:100vh;width:auto;max-width:100vw;object-fit:contain;
   aspect-ratio:5/7;
 }
 @media (max-aspect-ratio:5/7){
-  #cardSvg{width:100vw;height:auto;max-height:100vh}
+  #cardImage{width:100vw;height:auto;max-height:100vh}
 }
 </style>
 </head>
@@ -49,42 +34,14 @@ html,body{
 <div id="app">
   <button id="start">Démarrer la prédiction</button>
   <div id="listen">●</div>
-  <div id="status"></div>
-  <div id="card"><svg id="cardSvg" viewBox="0 0 500 700" aria-hidden="true"></svg></div>
-  <button id="again" aria-hidden="true"></button>
+  <div id="card"><img id="cardImage" alt=""></div>
 </div>
 
 <script>
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const start=document.getElementById("start");
-const listen=document.getElementById("listen");
-const status=document.getElementById("status");
 const card=document.getElementById("card");
-const svg=document.getElementById("cardSvg");
-
-const ranks={
-  "as":"A","ace":"A","un":"A","une":"A","1":"A",
-  "deux":"2","two":"2","2":"2",
-  "trois":"3","three":"3","3":"3",
-  "quatre":"4","four":"4","4":"4",
-  "cinq":"5","five":"5","5":"5",
-  "six":"6","6":"6",
-  "sept":"7","seven":"7","7":"7",
-  "huit":"8","eight":"8","8":"8",
-  "neuf":"9","nine":"9","9":"9",
-  "dix":"10","ten":"10","10":"10",
-  "valet":"J","jack":"J","j":"J",
-  "dame":"Q","queen":"Q","q":"Q",
-  "roi":"K","king":"K","k":"K"
-};
-
-const suits={
-  "coeur":"H","coeurs":"H","heart":"H","hearts":"H",
-  "carreau":"D","carreaux":"D","diamond":"D","diamonds":"D",
-  "trèfle":"C","trèfles":"C","trefle":"C","trefles":"C","tref":"C",
-  "club":"C","clubs":"C",
-  "pique":"S","piques":"S","spade":"S","spades":"S"
-};
+const cardImage=document.getElementById("cardImage");
 
 function clean(text){
   return text.toLowerCase()
@@ -98,39 +55,73 @@ function clean(text){
 function detect(text){
   const t=clean(text);
   let r=null,s=null;
-  const rankTests=[
-    [/\b(?:10|dix|ten)\b/,"10"],[ /\b(?:9|neuf|nine)\b/,"9"],
-    [/\b(?:8|huit|eight)\b/,"8"],[ /\b(?:7|sept|seven)\b/,"7"],
-    [/\b(?:6|six)\b/,"6"],[ /\b(?:5|cinq|five)\b/,"5"],
-    [/\b(?:4|quatre|four)\b/,"4"],[ /\b(?:3|trois|three)\b/,"3"],
-    [/\b(?:2|deux|two)\b/,"2"],[ /\b(?:1|as|ace|un|une)\b/,"A"],
-    [/\b(?:valet|jack|j)\b/,"J"],[ /\b(?:dame|queen|q)\b/,"Q"],
+
+  const ranks=[
+    [/\b(?:10|dix|ten)\b/,"10"],
+    [/\b(?:9|neuf|nine)\b/,"9"],
+    [/\b(?:8|huit|eight)\b/,"8"],
+    [/\b(?:7|sept|seven)\b/,"7"],
+    [/\b(?:6|six)\b/,"6"],
+    [/\b(?:5|cinq|five)\b/,"5"],
+    [/\b(?:4|quatre|four)\b/,"4"],
+    [/\b(?:3|trois|three)\b/,"3"],
+    [/\b(?:2|deux|two)\b/,"2"],
+    [/\b(?:1|as|ace|un|une)\b/,"A"],
+    [/\b(?:valet|jack|j)\b/,"J"],
+    [/\b(?:dame|queen|q)\b/,"Q"],
     [/\b(?:roi|king|k)\b/,"K"]
   ];
-  for(const [re,val] of rankTests){ if(re.test(t)){r=val;break;} }
+  for(const [re,val] of ranks){if(re.test(t)){r=val;break}}
+
   if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="H";
   else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="D";
-  else if(/\b(?:trefle|trefles|club|clubs)\b/.test(t)) s="C";
+  else if(/\b(?:trefle|trefles|trèfle|trèfles|club|clubs)\b/.test(t)) s="C";
   else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="S";
+
   return r&&s ? r+s : null;
 }
 
-let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
-let orientationArmed=false, revealTimer=null;
-window.predictionListenUntil=0;
+const rankName={
+  A:"ace",2:"2",3:"3",4:"4",5:"5",6:"6",7:"7",8:"8",9:"9",10:"10",
+  J:"jack",Q:"queen",K:"king"
+};
+const suitName={C:"clubs",D:"diamonds",H:"hearts",S:"spades"};
+
+function cardUrl(code){
+  const rank=code.slice(0,-1), suit=code.slice(-1);
+  return "https://webisso.github.io/playing-cards/svg/"
+    +rankName[rank]+"_of_"+suitName[suit]+".svg";
+}
+
+let rec=null,detected=null,listening=false,restarting=false;
+let listenTimer=null,revealTimer=null,orientationArmed=false;
+let listenUntil=0;
+
+function preloadCard(code){
+  const img=new Image();
+  img.onload=()=>{ if(detected===code) cardImage.dataset.ready="1"; };
+  img.src=cardUrl(code);
+  cardImage.src=img.src;
+}
+
+function safeRestart(){
+  try{if(rec)rec.start()}catch(e){}
+}
 
 function startListening(){
-  detected=null; restarting=false; orientationArmed=false;
-  if(revealTimer) clearTimeout(revealTimer);
-  window.predictionListenUntil=Date.now()+120000;
-  if(listenTimer) clearTimeout(listenTimer);
+  detected=null; orientationArmed=false;
+  cardImage.dataset.ready="0";
+  cardImage.removeAttribute("src");
+
+  listenUntil=Date.now()+120000;
+  if(listenTimer)clearTimeout(listenTimer);
   listenTimer=setTimeout(()=>{
-    window.predictionListenUntil=0;
+    listenUntil=0;
     try{if(rec)rec.stop()}catch(e){}
     listening=false;
   },120000);
 
-  if(!SR) return;
+  if(!SR)return;
 
   try{
     rec=new SR();
@@ -142,50 +133,41 @@ function startListening(){
     rec.onstart=()=>{
       listening=true;
       start.style.display="none";
-      listen.style.display="none";
     };
 
     rec.onresult=e=>{
-      const result=e.results[e.results.length-1];
-      if(!result) return;
-
-      const candidates=[];
-      for(let i=0;i<result.length;i++){
-        if(result[i] && result[i].transcript)
-          candidates.push(result[i].transcript.trim());
-      }
-
-      let found=null;
-      for(const text of candidates){
-        const c=detect(text);
-        if(c){found=c;break;}
-      }
-
-      if(found && !detected){
-        detected=found;
-        /* La carte est mémorisée puis le micro s'arrête :
-           aucune écoute inutile après reconnaissance. */
-        try{if(rec)rec.stop()}catch(e){}
-        listening=false;
-        armFlipReveal();
+      for(let n=e.results.length-1;n>=0;n--){
+        const result=e.results[n];
+        if(!result)continue;
+        for(let i=0;i<result.length;i++){
+          const spoken=(result[i]?.transcript||"").trim();
+          const found=detect(spoken);
+          if(found && !detected){
+            detected=found;
+            preloadCard(found);
+            try{if(rec)rec.stop()}catch(err){}
+            listening=false;
+            armFlipReveal();
+            return;
+          }
+        }
       }
     };
 
     rec.onerror=()=>{
       listening=false;
-      if(Date.now()<window.predictionListenUntil && !detected){
-        setTimeout(()=>{ if(!detected) safeRestart(); },400);
-      }
+      if(Date.now()<listenUntil && !detected)
+        setTimeout(()=>{if(!detected)safeRestart()},400);
     };
 
     rec.onend=()=>{
       listening=false;
-      if(detected) return;
-      if(Date.now()<window.predictionListenUntil && !restarting){
+      if(detected)return;
+      if(Date.now()<listenUntil && !restarting){
         restarting=true;
         setTimeout(()=>{
           restarting=false;
-          if(!detected && Date.now()<window.predictionListenUntil) safeRestart();
+          if(!detected && Date.now()<listenUntil)safeRestart();
         },350);
       }
     };
@@ -194,40 +176,36 @@ function startListening(){
   }catch(e){}
 }
 
-function safeRestart(){
-  try{if(rec)rec.start()}catch(e){}
-}
-
 function armFlipReveal(){
   orientationArmed=false;
-  if(revealTimer) clearTimeout(revealTimer);
-  /* Laisse le temps de poser le téléphone avant d'armer le geste. */
+  if(revealTimer)clearTimeout(revealTimer);
+
+  /* Temps de poser le téléphone et de le retourner. */
   setTimeout(()=>{
-    if(detected) orientationArmed=true;
+    if(detected)orientationArmed=true;
   },1500);
 }
 
 window.addEventListener("deviceorientation",e=>{
-  if(!detected || !orientationArmed) return;
-  if(typeof e.beta!=="number") return;
+  if(!detected || !orientationArmed)return;
+  if(typeof e.beta!=="number")return;
 
-  /* Écran vers le bas : le téléphone approche de 180°. */
+  /* Téléphone retourné face contre la table. */
   if(Math.abs(e.beta)>125){
     orientationArmed=false;
-    if(revealTimer) clearTimeout(revealTimer);
+    if(revealTimer)clearTimeout(revealTimer);
     revealTimer=setTimeout(()=>{
-      if(detected) reveal();
+      if(detected)reveal();
     },700);
   }
 });
 
-/* Sur certains Android récents, le capteur demande une permission. */
 async function requestOrientationPermission(){
   try{
     if(typeof DeviceOrientationEvent!=="undefined" &&
        typeof DeviceOrientationEvent.requestPermission==="function"){
       const p=await DeviceOrientationEvent.requestPermission();
-      if(p!=="granted") return false;
+      if(p!=="granted")return false;
     }
   }catch(e){}
   return true;
@@ -238,150 +216,27 @@ start.onclick=async()=>{
   startListening();
 };
 
-/* ---------- Dessin d'un jeu de cartes classique ---------- */
-
-const NS="http://www.w3.org/2000/svg";
-const RED="#d71920", BLACK="#111";
-const suitSymbol={H:"♥",D:"♦",C:"♣",S:"♠"};
-
-function el(tag,attrs={},parent=svg){
-  const n=document.createElementNS(NS,tag);
-  for(const [k,v] of Object.entries(attrs)) n.setAttribute(k,v);
-  parent.appendChild(n);
-  return n;
-}
-function text(x,y,str,size,weight="700",fill=BLACK,anchor="middle",parent=svg){
-  return el("text",{x,y,"font-family":"Georgia,Times New Roman,serif","font-size":size,"font-weight":weight,fill,"text-anchor":anchor},parent).textContent=str;
-}
-function pip(x,y,suit,size=48,parent=svg){
-  text(x,y,suitSymbol[suit],size,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",parent);
-}
-function roundedRect(x,y,w,h,rx,fill,stroke,sw,parent=svg){
-  el("rect",{x,y,width:w,height:h,rx,fill,stroke,"stroke-width":sw},parent);
-}
-
-const pipPositions={
-  "2":[[250,205],[250,495]],
-  "3":[[250,195],[250,350],[250,505]],
-  "4":[[165,205],[335,205],[165,495],[335,495]],
-  "5":[[165,205],[335,205],[250,350],[165,495],[335,495]],
-  "6":[[165,190],[335,190],[165,350],[335,350],[165,510],[335,510]],
-  "7":[[165,180],[335,180],[250,265],[165,420],[335,420],[165,540],[335,540]],
-  "8":[[165,175],[335,175],[250,260],[165,350],[335,350],[250,440],[165,525],[335,525]],
-  "9":[[165,170],[335,170],[165,275],[335,275],[250,350],[165,425],[335,425],[165,530],[335,530]],
-  "10":[[165,165],[335,165],[250,235],[165,300],[335,300],[250,350],[165,400],[335,400],[250,465],[165,535],[335,535]]
-};
-
-function drawPips(rank,suit){
-  const pts=pipPositions[rank]||[];
-  const g=el("g",{});
-  pts.forEach(([x,y],i)=>{
-    /* In a traditional layout, the lower half is inverted. */
-    const lower=y>350;
-    const t=text(x,y+(lower?18:0),suitSymbol[suit],44,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-    if(lower) t.setAttribute("transform",`rotate(180 ${x} ${y})`);
-  });
-}
-
-function drawIndex(rank,suit,x,y,scale=1,rot=0){
-  const g=el("g",{transform:`translate(${x} ${y}) rotate(${rot}) scale(${scale})`});
-  text(0,25,rank,55,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-  text(0,72,suitSymbol[suit],42,"700",suit==="H"||suit==="D"?RED:BLACK,"middle",g);
-}
-
-function drawCourt(rank,suit){
-  const red=suit==="H"||suit==="D";
-  const main=red?RED:BLACK;
-  const gold="#e5b72d";
-  const blue="#2057a8";
-
-  const g=el("g",{});
-  /* Cadre central façon carte de cour classique. */
-  roundedRect(70,100,360,500,12,"#fff",blue,5,g);
-
-  /* Double panneau miroir. */
-  el("rect",{x:78,y:108,width:344,height:238,rx:7,fill:gold},g);
-  el("rect",{x:78,y:354,width:344,height:238,rx:7,fill:gold},g);
-  el("rect",{x:95,y:125,width:310,height:204,rx:5,fill:"#fff"},g);
-  el("rect",{x:95,y:371,width:310,height:204,rx:5,fill:"#fff"},g);
-
-  /* Corps du personnage. */
-  function half(y,flip=false){
-    const tg=el("g",{transform:flip?`translate(0 ${2*y+205}) scale(1 -1)`:`translate(0 ${y})`},g);
-    el("path",{d:"M145 205 Q160 145 205 135 Q250 120 295 135 Q340 145 355 205 L330 330 L170 330 Z",fill:blue,stroke:BLACK,"stroke-width":5},tg);
-    el("path",{d:"M190 205 L250 155 L310 205 L290 325 L210 325 Z",fill:main,stroke:BLACK,"stroke-width":5},tg);
-    el("circle",{cx:250,cy:178,r:44,fill:"#f4d2ad",stroke:BLACK,"stroke-width":5},tg);
-    el("path",{d:"M207 174 Q250 112 293 174 Q280 145 250 143 Q220 145 207 174",fill:BLACK},tg);
-    el("circle",{cx:235,cy:177,r:4,fill:BLACK},tg);
-    el("circle",{cx:265,cy:177,r:4,fill:BLACK},tg);
-    el("path",{d:"M237 195 Q250 202 263 195",fill:"none",stroke:BLACK,"stroke-width":4,"stroke-linecap":"round"},tg);
-    el("path",{d:"M150 235 L115 300 L150 315 L190 265 Z",fill:blue,stroke:BLACK,"stroke-width":5},tg);
-    el("path",{d:"M350 235 L385 300 L350 315 L310 265 Z",fill:blue,stroke:BLACK,"stroke-width":5},tg);
-    pip(250,240,suit,42,tg);
-    pip(250,300,suit,42,tg);
-    el("path",{d:"M190 215 Q250 250 310 215",fill:"none",stroke:gold,"stroke-width":12},tg);
-  }
-  half(108,false);
-  half(353,true);
-
-  /* Bordures et indices. */
-  text(48,78,rank,58,"700",main,"middle",g);
-  text(48,123,suitSymbol[suit],42,"700",main,"middle",g);
-  const bottom=el("g",{transform:"rotate(180 452 622)"},g);
-  text(48,78,rank,58,"700",main,"middle",bottom);
-  text(48,123,suitSymbol[suit],42,"700",main,"middle",bottom);
-
-  /* Petite enseigne centrale. */
-  text(250,353,suitSymbol[suit],36,"700",main,"middle",g);
-}
-
-function renderCard(code){
-  while(svg.firstChild) svg.removeChild(svg.firstChild);
-  const rank=code.slice(0,-1), suit=code.slice(-1);
-  const red=suit==="H"||suit==="D";
-  const ink=red?RED:BLACK;
-
-  /* Fond et bordure réalistes, proportions 5:7. */
-  roundedRect(5,5,490,690,30,"#fff","#d0d0d0",2);
-  roundedRect(18,18,464,664,24,"none","#eeeeee",1);
-
-  /* Indices de coins. */
-  text(52,72,rank,58,"700",ink,"middle");
-  text(52,119,suitSymbol[suit],40,"700",ink,"middle");
-  const corner=el("g",{transform:"rotate(180 448 628)"});
-  text(52,72,rank,58,"700",ink,"middle",corner);
-  text(52,119,suitSymbol[suit],40,"700",ink,"middle",corner);
-
-  if(rank==="J"||rank==="Q"||rank==="K"){
-    drawCourt(rank,suit);
-  }else if(rank==="A"){
-    pip(250,385,suit,220);
-  }else{
-    drawPips(rank,suit);
-  }
-}
-
 function reveal(){
-  if(!detected) return;
+  if(!detected)return;
   try{if(rec)rec.stop()}catch(e){}
   listening=false;
   if(listenTimer)clearTimeout(listenTimer);
-  window.predictionListenUntil=0;
+  listenUntil=0;
   orientationArmed=false;
-  renderCard(detected);
+
+  /* La carte seule occupe l'écran. Aucun texte ni bouton. */
   card.style.display="flex";
 }
 
-/* Après révélation, un tap discret permet de préparer une nouvelle prédiction.
-   Il n'y a aucun texte ni bouton affiché sur la carte. */
+/* Tap sur la carte : retour à l'écran de départ pour une nouvelle prédiction. */
 card.addEventListener("click",()=>{
   card.style.display="none";
   detected=null;
   orientationArmed=false;
   if(revealTimer)clearTimeout(revealTimer);
+  cardImage.removeAttribute("src");
   start.style.display="block";
 });
-
 </script>
 </body>
 </html>
