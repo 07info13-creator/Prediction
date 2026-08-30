@@ -57,6 +57,8 @@ function clean(text){
 
 function detect(text){
   const t=clean(text);
+  // "sis" correspond à la prononciation française de « six ».
+  const spoken=t.replace(/\b(?:sis|sisse|sixe)\b/g,"six");
   let r=null,s=null;
 
   const ranks=[
@@ -64,7 +66,7 @@ function detect(text){
     [/\b(?:9|neuf|nine)\b/,"9"],
     [/\b(?:8|huit|eight)\b/,"8"],
     [/\b(?:7|sept|seven)\b/,"7"],
-    [/\b(?:6|six)\b/,"6"],
+    [/\b(?:6|six|sis|sisse|sixe)\b/,"6"],
     [/\b(?:5|cinq|five)\b/,"5"],
     [/\b(?:4|quatre|four)\b/,"4"],
     [/\b(?:3|trois|three)\b/,"3"],
@@ -74,12 +76,12 @@ function detect(text){
     [/\b(?:dame|queen|q)\b/,"Q"],
     [/\b(?:roi|king|k)\b/,"K"]
   ];
-  for(const [re,val] of ranks){if(re.test(t)){r=val;break}}
+  for(const [re,val] of ranks){if(re.test(spoken)){r=val;break}}
 
-  if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(t)) s="H";
-  else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(t)) s="D";
-  else if(/\b(?:trefle|trefles|trèfle|trèfles|club|clubs)\b/.test(t)) s="C";
-  else if(/\b(?:pique|piques|spade|spades)\b/.test(t)) s="S";
+  if(/\b(?:coeur|coeurs|heart|hearts)\b/.test(spoken)) s="H";
+  else if(/\b(?:carreau|carreaux|diamond|diamonds)\b/.test(spoken)) s="D";
+  else if(/\b(?:trefle|trefles|trèfle|trèfles|club|clubs)\b/.test(spoken)) s="C";
+  else if(/\b(?:pique|piques|spade|spades)\b/.test(spoken)) s="S";
 
   return r&&s ? r+s : null;
 }
