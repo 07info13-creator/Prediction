@@ -76,50 +76,38 @@ function clean(text){
 }
 
 function detect(text){
-  // Chrome peut renvoyer de petites variantes (« 8 », « huit »,
-  // accents, ponctuation, etc.). On normalise puis on cherche
-  // séparément une valeur et une couleur, sans concaténer les résultats.
+  // Normalisation robuste pour les variantes de reconnaissance vocale de Chrome.
   const t=clean(text);
-  const words=t.split(/\s+/).filter(Boolean);
-  let r=null,s=null;
+  let r=null, s=null;
 
-  // 1) Recherche exacte par mots.
-  for(const w of words){
-    if(!r && ranks[w]) r=ranks[w];
-    if(!s && suits[w]) s=suits[w];
+  // Valeur : on accepte aussi bien les chiffres que les nombres prononcés.
+  const rankTests=[
+    [/\b10\b|\bdix\b|\bten\b/,"10"],
+    [/\b9\b|\bneuf\b|\bnine\b/,"9"],
+    [/\b8\b|\bhuit\b|\beight\b/,"8"],
+    [/\b7\b|\bsept\b|\bseven\b/,"7"],
+    [/\b6\b|\bsix\b/,"6"],
+    [/\b5\b|\bcinq\b|\bfive\b/,"5"],
+    [/\b4\b|\bquatre\b|\bfour\b/,"4"],
+    [/\b3\b|\btrois\b|\bthree\b/,"3"],
+    [/\b2\b|\bdeux\b|\btwo\b/,"2"],
+    [/\b1\b|\bas\b|\bace\b|\bun\b|\bune\b/,"A"],
+    [/\bvalet\b|\bjack\b|\bj\b/,"J"],
+    [/\bdame\b|\bqueen\b|\bq\b/,"Q"],
+    [/\broi\b|\bking\b|\bk\b/,"K"]
+  ];
+  for(const [re,val] of rankTests){
+    if(re.test(t)){ r=val; break; }
   }
 
-  // 2) Secours pour les nombres écrits/collés différemment par Chrome.
-  if(!r){
-    const rankPatterns=[
-      [/\\b10\\b|\\bdix\\b|\\bten\\b/,"10"],
-      [/\\b9\\b|\\bneuf\\b|\\bnine\\b/,"9"],
-      [/\\b8\\b|\\bhuit\\b|\\beight\\b/,"8"],
-      [/\\b7\\b|\\bsept\\b|\\bseven\\b/,"7"],
-      [/\\b6\\b|\\bsix\\b/,"6"],
-      [/\\b5\\b|\\bcinq\\b|\\bfive\\b/,"5"],
-      [/\\b4\\b|\\bquatre\\b|\\bfour\\b/,"4"],
-      [/\\b3\\b|\\btrois\\b|\\bthree\\b/,"3"],
-      [/\\b2\\b|\\bdeux\\b|\\btwo\\b/,"2"],
-      [/\\b1\\b|\\bas\\b|\\bace\\b/,"A"],
-      [/\\bvalet\\b|\\bjack\\b|\\bj\\b/,"J"],
-      [/\\bdame\\b|\\bqueen\\b|\\bq\\b/,"Q"],
-      [/\\broi\\b|\\bking\\b|\\bk\\b/,"K"]
-    ];
-    for(const [re,val] of rankPatterns){
-      if(re.test(t)){ r=val; break; }
-    }
-  }
+  // Couleur : on tolère singulier/pluriel, accents déjà supprimés par clean(),
+  // et les variantes anglaises de Chrome.
+  if(/\bcoeur(?:s)?\b|\bheart(?:s)?\b/.test(t)) s="♥";
+  else if(/\bcarreau(?:x)?\b|\bdiamond(?:s)?\b/.test(t)) s="♦";
+  else if(/\btrefle(?:s)?\b|\bclub(?:s)?\b/.test(t)) s="♣";
+  else if(/\bpique(?:s)?\b|\bspade(?:s)?\b/.test(t)) s="♠";
 
-  // 3) Recherche robuste des couleurs, y compris cœur/trèfle sans accent.
-  if(!s){
-    if(/\\bcoeur(s)?\\b|\\bheart(s)?\\b/.test(t)) s="♥";
-    else if(/\\bcarreau(x)?\\b|\\bdiamond(s)?\\b/.test(t)) s="♦";
-    else if(/\\btrefl(e|es|é|és)?\\b|\\bclub(s)?\\b/.test(t)) s="♣";
-    else if(/\\bpique(s)?\\b|\\bspade(s)?\\b/.test(t)) s="♠";
-  }
-
-  return r&&s?r+s:null;
+  return r && s ? r+s : null;
 }
 
 let rec=null, detected=null, listening=false;
