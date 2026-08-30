@@ -19,8 +19,7 @@ html,body{
   background:#fff;color:#111;border:0;border-radius:30px;
   padding:16px 26px;font-size:17px;
 }
-#prediction,#instruction,#listen,#again{display:none}
-#status{display:none;color:#fff;font-size:18px;margin-top:18px;padding:0 24px}
+#prediction,#instruction,#listen,#status,#again{display:none}
 
 /* Révélation : carte de vraies proportions 5:7, plein écran. */
 #card{
@@ -182,60 +181,46 @@ function detectBest(candidates){
   return best.code;
 }
 
-let rec=null, detected=null, listening=false, listenTimer=null;
-
-function showStatus(message){
-  status.textContent=message;
-  status.style.display="block";
-}
-
-function stopListening(){
-  if(listenTimer) clearTimeout(listenTimer);
-  listenTimer=null;
-  try{ if(rec) rec.stop(); }catch(e){}
-  listening=false;
-}
+let rec=null, detected=null, listening=false, listenTimer=null, restarting=false;
+window.predictionListenUntil=0;
 
 function startListening(){
-  detected=null;
-  stopListening();
+  detected=null; restarting=false;
+  if(listenTimer) clearTimeout(listenTimer);
+  window.predictionListenUntil=Date.now()+120000;
+  if(listenTimer) clearTimeout(listenTimer);
+  listenTimer=setTimeout(()=>{
+    window.predictionListenUntil=0;
+    try{if(rec)rec.stop()}catch(e){}
+    listening=false;
+  },120000);
 
-  if(!SR){
-    start.style.display="block";
-    start.disabled=true;
-    start.textContent="Reconnaissance vocale indisponible";
-    showStatus("Ce navigateur ne permet pas la reconnaissance vocale.");
-    return;
-  }
+  if(!SR) return;
 
   try{
     rec=new SR();
     rec.lang="fr-FR";
-    rec.continuous=false;
-    rec.interimResults=true;
+    rec.continuous=true;
+    rec.interimResults=false;
     rec.maxAlternatives=10;
 
     rec.onstart=()=>{
       listening=true;
       start.style.display="none";
-      showStatus("Écoute… dis le nom de la carte.");
+      listen.style.display="none";
     };
 
     rec.onresult=e=>{
-      let candidates=[];
+      const result=e.results[e.results.length-1];
+      if(!result) return;
 
-      for(let i=e.resultIndex;i<e.results.length;i++){
-        const result=e.results[i];
-        if(!result) continue;
-
-        for(let j=0;j<result.length;j++){
-          const alt=result[j];
-          if(alt && alt.transcript){
-            candidates.push({
-              text:alt.transcript.trim(),
-              confidence:Number(alt.confidence)||0
-            });
-          }
+      const candidates=[];
+      for(let i=0;i<result.length;i++){
+        if(result[i] && result[i].transcript){
+          candidates.push({
+            text:result[i].transcript.trim(),
+            confidence:result[i].confidence
+          });
         }
       }
 
@@ -243,55 +228,39 @@ function startListening(){
 
       if(found && !detected){
         detected=found;
-        stopListening();
-        reveal();
+        try{if(rec)rec.stop()}catch(e){}
+        listening=false;
+
+                reveal();
       }
     };
 
-    rec.onerror=e=>{
+    rec.onerror=()=>{
       listening=false;
-      const code=e && e.error ? e.error : "erreur inconnue";
-
-      if(code==="not-allowed" || code==="service-not-allowed"){
-        start.style.display="block";
-        showStatus("Le microphone est refusé. Autorise le microphone pour ce site puis réessaie.");
-      }else if(code==="no-speech"){
-        start.style.display="block";
-        showStatus("Je n'ai rien entendu. Appuie sur le bouton et prononce la carte.");
-      }else{
-        start.style.display="block";
-        showStatus("Erreur de reconnaissance vocale. Appuie sur le bouton pour réessayer.");
+      if(Date.now()<window.predictionListenUntil && !detected){
+        setTimeout(()=>{ if(!detected) safeRestart(); },400);
       }
     };
 
     rec.onend=()=>{
       listening=false;
-      if(!detected){
-        start.style.display="block";
-        showStatus("Dis par exemple : « sept de pique ».");
+      if(detected) return;
+      if(Date.now()<window.predictionListenUntil && !restarting){
+        restarting=true;
+        setTimeout(()=>{
+          restarting=false;
+          if(!detected && Date.now()<window.predictionListenUntil) safeRestart();
+        },350);
       }
     };
 
     rec.start();
-
-    listenTimer=setTimeout(()=>{
-      if(!detected){
-        stopListening();
-        start.style.display="block";
-        showStatus("Temps d'écoute terminé. Réessaie.");
-      }
-    },15000);
-
-  }catch(e){
-    listening=false;
-    start.style.display="block";
-    showStatus("Impossible de démarrer le microphone. Réessaie.");
-  }
+  }catch(e){}
 }
 
-start.onclick=()=>{
-  startListening();
-};
+function safeRestart(){
+  try{if(rec)rec.start()}catch(e){}
+}
 
 /* ---------- Dessin d'un jeu de cartes classique ---------- */
 
@@ -401,6 +370,7 @@ function reveal(){
 card.addEventListener("click",()=>{
   card.style.display="none";
   detected=null;
+  if(revealTimer)clearTimeout(revealTimer);
   start.style.display="block";
 });
 
